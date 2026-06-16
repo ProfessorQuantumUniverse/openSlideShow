@@ -27,6 +27,17 @@ const els = {
   kbVal: $('kbVal'),
   bgSeg: $('bgSeg'),
   transSelect: $('transSelect'),
+  ovEnable: $('ovEnable'),
+  ovText: $('ovText'),
+  ovFont: $('ovFont'),
+  ovSizeRange: $('ovSizeRange'),
+  ovSizeVal: $('ovSizeVal'),
+  ovColor: $('ovColor'),
+  ovPos: $('ovPos'),
+  ovBold: $('ovBold'),
+  ovShadow: $('ovShadow'),
+  ovPreviewLayer: $('ovPreviewLayer'),
+  ovPreviewText: $('ovPreviewText'),
   displayInfo: $('displayInfo'),
   identifyBtn: $('identifyBtn'),
   fsBtn: $('fsBtn'),
@@ -45,6 +56,25 @@ function paintRange(input) {
 
 function setStatus(msg) { els.statusText.textContent = msg; }
 
+// --- overlay --------------------------------------------------------------
+function readOverlay() {
+  return {
+    enabled: els.ovEnable.checked,
+    text: els.ovText.value,
+    fontFamily: els.ovFont.value,
+    fontSize: parseFloat(els.ovSizeRange.value),
+    color: els.ovColor.value,
+    position: els.ovPos.value,
+    bold: els.ovBold.checked,
+    shadow: els.ovShadow.checked
+  };
+}
+
+// Mirror the overlay onto the local preview so it is WYSIWYG with the output.
+function renderOverlayPreview() {
+  applyTextOverlay(els.ovPreviewLayer, els.ovPreviewText, readOverlay());
+}
+
 // --- config push ----------------------------------------------------------
 function pushConfig() {
   window.api.setConfig({
@@ -52,8 +82,10 @@ function pushConfig() {
     transitionDuration: parseFloat(els.transRange.value) * 1000,
     kenBurnsIntensity: parseFloat(els.kbRange.value),
     backgroundMode: els.bgSeg.querySelector('.seg.active').dataset.val,
-    transitionMode: els.transSelect.value
+    transitionMode: els.transSelect.value,
+    overlay: readOverlay()
   });
+  renderOverlayPreview();
 }
 
 // --- transport ------------------------------------------------------------
@@ -103,6 +135,51 @@ els.bgSeg.addEventListener('click', (e) => {
 });
 
 els.transSelect.addEventListener('change', pushConfig);
+
+// --- overlay controls -----------------------------------------------------
+els.ovSizeRange.addEventListener('input', () => {
+  els.ovSizeVal.textContent = parseFloat(els.ovSizeRange.value).toFixed(1) + '%';
+  paintRange(els.ovSizeRange);
+  pushConfig();
+});
+// `input` keeps the text live as the operator types; the rest fire on change.
+els.ovText.addEventListener('input', pushConfig);
+els.ovColor.addEventListener('input', pushConfig);
+[els.ovEnable, els.ovFont, els.ovPos, els.ovBold, els.ovShadow].forEach(el =>
+  el.addEventListener('change', pushConfig)
+);
+
+// Populate the font picker from the system's installed fonts.
+window.api.listFonts().then((fonts) => {
+  const frag = document.createDocumentFragment();
+  (fonts || []).forEach((f) => {
+    const o = document.createElement('option');
+    o.value = f;
+    o.textContent = f;
+    o.style.fontFamily = `"${f}", system-ui, sans-serif`;
+    frag.appendChild(o);
+  });
+  els.ovFont.appendChild(frag);
+  if (pendingOverlayFont) {
+    selectFont(pendingOverlayFont);
+    pendingOverlayFont = null;
+  }
+  renderOverlayPreview();
+});
+
+// Ensure a font value is selectable even if enumeration missed it.
+function selectFont(name) {
+  if (!name) return;
+  const exists = Array.from(els.ovFont.options).some(o => o.value === name);
+  if (!exists) {
+    const o = document.createElement('option');
+    o.value = name;
+    o.textContent = name;
+    o.style.fontFamily = `"${name}", system-ui, sans-serif`;
+    els.ovFont.insertBefore(o, els.ovFont.firstChild);
+  }
+  els.ovFont.value = name;
+}
 
 // --- keyboard shortcuts ---------------------------------------------------
 document.addEventListener('keydown', (e) => {
@@ -187,6 +264,7 @@ function applyState(s) {
 }
 
 let controlsSynced = false;
+let pendingOverlayFont = null;    // font to select once the picker is populated
 function syncConfigControls(cfg) {
   if (controlsSynced) return;     // only seed once; user owns them afterwards
   controlsSynced = true;
@@ -202,9 +280,25 @@ function syncConfigControls(cfg) {
     s.classList.toggle('active', s.dataset.val === cfg.backgroundMode);
   });
   if (els.transSelect.options.length) els.transSelect.value = cfg.transitionMode;
+
+  // overlay
+  const ov = cfg.overlay || {};
+  els.ovEnable.checked = !!ov.enabled;
+  els.ovText.value = ov.text || '';
+  els.ovSizeRange.value = ov.fontSize != null ? ov.fontSize : 6;
+  els.ovSizeVal.textContent = parseFloat(els.ovSizeRange.value).toFixed(1) + '%';
+  paintRange(els.ovSizeRange);
+  els.ovColor.value = ov.color || '#ffffff';
+  if (ov.position) els.ovPos.value = ov.position;
+  els.ovBold.checked = ov.bold !== false;
+  els.ovShadow.checked = ov.shadow !== false;
+  // The font list may not have loaded yet; defer selection if so.
+  if (els.ovFont.options.length) selectFont(ov.fontFamily);
+  else pendingOverlayFont = ov.fontFamily;
+  renderOverlayPreview();
 }
 
 // --- boot ----------------------------------------------------------------
-[els.durRange, els.transRange, els.kbRange].forEach(paintRange);
+[els.durRange, els.transRange, els.kbRange, els.ovSizeRange].forEach(paintRange);
 window.api.getState().then(applyState);
 setStatus('Bereit. Wähle einen Bilderordner.');

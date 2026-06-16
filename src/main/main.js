@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut } = require('electron');
 const path = require('path');
+const { execFile } = require('child_process');
 const { scanFolder } = require('./mediaScanner');
 const { Playlist } = require('./playlist');
 
@@ -27,7 +28,17 @@ const state = {
     transitionDuration: 1500,
     kenBurnsIntensity: 1.0,
     backgroundMode: 'blur',     // 'blur' | 'solid' | 'stretch'
-    transitionMode: 'random'    // 'random' | one of TRANSITIONS
+    transitionMode: 'random',   // 'random' | one of TRANSITIONS
+    overlay: {                  // custom text overlay (e.g. the event name)
+      enabled: false,
+      text: '',
+      fontFamily: 'Segoe UI',
+      fontSize: 6,              // height of the text as a % of the screen height
+      color: '#ffffff',
+      position: 'bottom-right', // {top|middle|bottom}-{left|center|right}
+      bold: true,
+      shadow: true
+    }
   }
 };
 
@@ -183,6 +194,67 @@ function describeDisplays() {
       bounds: d.bounds
     }))
   };
+}
+
+// ---------------------------------------------------------------------------
+// System font enumeration (for the text-overlay font picker)
+// ---------------------------------------------------------------------------
+// A small, always-available fallback so the picker is never empty even if the
+// platform enumeration fails (no PowerShell / no fontconfig).
+const FALLBACK_FONTS = [
+  'Arial', 'Calibri', 'Cambria', 'Candara', 'Comic Sans MS', 'Consolas',
+  'Constantia', 'Corbel', 'Courier New', 'Franklin Gothic', 'Gabriola',
+  'Georgia', 'Impact', 'Lucida Console', 'Lucida Sans Unicode',
+  'Palatino Linotype', 'Segoe UI', 'Tahoma', 'Times New Roman',
+  'Trebuchet MS', 'Verdana'
+];
+
+let _fontsCache = null;
+
+function cleanFontList(names) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of names) {
+    const name = String(raw).trim();
+    // Skip empties, hidden font families (leading '@' on Windows) and dupes.
+    if (!name || name.startsWith('@') || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push(name);
+  }
+  out.sort((a, b) => a.localeCompare(b));
+  return out;
+}
+
+function listSystemFonts() {
+  if (_fontsCache) return Promise.resolve(_fontsCache);
+  return new Promise((resolve) => {
+    const done = (names) => {
+      const list = names && names.length ? cleanFontList(names) : FALLBACK_FONTS.slice();
+      _fontsCache = list;
+      resolve(list);
+    };
+
+    if (process.platform === 'win32') {
+      const ps =
+        'Add-Type -AssemblyName System.Drawing;' +
+        '(New-Object System.Drawing.Text.InstalledFontCollection).Families' +
+        ' | ForEach-Object { $_.Name }';
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', ps],
+        { timeout: 8000, windowsHide: true, maxBuffer: 1024 * 1024 },
+        (err, stdout) => done(err || !stdout ? null : stdout.split(/\r?\n/))
+      );
+    } else {
+      // macOS / Linux: fontconfig is the most portable source of family names.
+      execFile(
+        'fc-list',
+        ['--format', '%{family[0]}\n'],
+        { timeout: 8000, maxBuffer: 1024 * 1024 },
+        (err, stdout) => done(err || !stdout ? null : stdout.split(/\r?\n/))
+      );
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +437,8 @@ function registerIpc() {
     send(outputWin, 'identify', true);
     return true;
   });
+
+  ipcMain.handle('fonts:list', () => listSystemFonts());
 }
 
 // ---------------------------------------------------------------------------

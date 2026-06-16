@@ -127,6 +127,7 @@ body {
   padding: 10px 14px;
   background: linear-gradient(0deg, rgba(0,0,0,0.75), transparent);
   font-size: 12px; pointer-events: none;
+  z-index: 16;   /* keep the filename bar above the text-overlay preview */
 }
 .cur-name { color: #fff; font-weight: 500; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cur-count { color: var(--txt-dim); }
@@ -205,6 +206,41 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--card-2); color: var(--txt); border: 1px solid var(--line);
   font-family: inherit; font-size: 13px; cursor: pointer;
 }
+
+.text-input {
+  width: 100%; padding: 10px 12px; border-radius: 10px;
+  background: var(--card-2); color: var(--txt); border: 1px solid var(--line);
+  font-family: inherit; font-size: 13px;
+}
+.text-input::placeholder { color: var(--txt-mute); }
+.text-input:focus { outline: none; border-color: var(--accent); }
+
+.color-input {
+  width: 48px; height: 40px; padding: 2px; cursor: pointer;
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 10px;
+}
+.color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.color-input::-webkit-color-swatch { border: none; border-radius: 6px; }
+
+/* on/off switch (used in card headers) */
+.switch { position: relative; display: inline-flex; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch-track {
+  width: 40px; height: 22px; border-radius: 22px;
+  background: #2a3142; border: 1px solid var(--line);
+  transition: background 0.15s ease;
+}
+.switch-track::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  transition: transform 0.15s ease;
+}
+.switch input:checked + .switch-track { background: var(--accent-grad); border-color: transparent; }
+.switch input:checked + .switch-track::after { transform: translateX(18px); }
+
+.checks { display: flex; gap: 18px; }
+.check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--txt); cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 
 .segmented { display: flex; gap: 6px; background: var(--bg); padding: 4px; border-radius: 10px; border: 1px solid var(--line); }
 .seg {

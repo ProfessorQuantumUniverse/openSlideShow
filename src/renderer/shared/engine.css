@@ -69,3 +69,24 @@
 .oss-preview .oss-fg {
   filter: none;
 }
+
+/* --- custom text overlay (event name etc.) --- */
+.text-overlay-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;                 /* alignment set inline from the config */
+  padding: 3% 3.5%;
+  pointer-events: none;
+  z-index: 15;
+  /* Establish a size container so the text can scale in `cqh` units. */
+  container-type: size;
+}
+
+.text-overlay {
+  font-size: calc(var(--ov-size, 6) * 1cqh);
+  line-height: 1.15;
+  max-width: 92%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  letter-spacing: 0.01em;
+}
