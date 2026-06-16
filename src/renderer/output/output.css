@@ -1,0 +1,63 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  background: #000;
+  overflow: hidden;
+  cursor: none;               /* no mouse pointer on the beamer */
+}
+
+#stage {
+  position: absolute;
+  inset: 0;
+}
+
+.idle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: radial-gradient(circle at 50% 40%, #14171f 0%, #000 70%);
+  color: #e8eaf0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  transition: opacity 0.6s ease;
+  z-index: 10;
+}
+.idle.hidden { opacity: 0; pointer-events: none; }
+
+.idle-mark {
+  font-size: clamp(28px, 5vw, 64px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: linear-gradient(90deg, #7aa2ff, #c79bff 60%, #ff9bcf);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.idle-sub {
+  font-size: clamp(13px, 1.4vw, 20px);
+  color: #8b91a3;
+}
+
+.ident {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: clamp(60px, 16vw, 240px);
+  font-weight: 800;
+  color: #fff;
+  background: rgba(40, 90, 255, 0.55);
+  letter-spacing: 0.1em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 20;
+}
+.ident.show { opacity: 1; }

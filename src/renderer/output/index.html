@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline';" />
+  <title>OpenSlideShow — Output</title>
+  <link rel="stylesheet" href="../shared/engine.css" />
+  <link rel="stylesheet" href="output.css" />
+</head>
+<body>
+  <div id="stage"></div>
+
+  <!-- Shown only until a folder is loaded -->
+  <div id="idle" class="idle">
+    <div class="idle-mark">OpenSlideShow</div>
+    <div class="idle-sub">Bereit — Ordner im Control-Panel wählen</div>
+  </div>
+
+  <!-- "Identify this display" flash -->
+  <div id="ident" class="ident">OUTPUT</div>
+
+  <script src="../shared/engine.js"></script>
+  <script src="output.js"></script>
+</body>
+</html>
