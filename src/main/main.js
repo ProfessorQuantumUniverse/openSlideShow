@@ -11,8 +11,11 @@ const isDev = process.argv.includes('--dev');
 // Central application state (single source of truth).
 // ---------------------------------------------------------------------------
 const TRANSITIONS = [
-  'fade', 'blur-fade', 'wipe-left', 'wipe-right', 'wipe-up', 'wipe-down',
-  'push-left', 'push-right', 'zoom-in', 'zoom-out', 'circle'
+  'fade', 'blur-fade', 'zoom-blur',
+  'wipe-left', 'wipe-right', 'wipe-up', 'wipe-down', 'wipe-diagonal',
+  'push-left', 'push-right', 'push-up', 'push-down',
+  'cover-left', 'cover-right',
+  'zoom-in', 'zoom-out', 'circle'
 ];
 
 const state = {

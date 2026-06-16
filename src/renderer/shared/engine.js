@@ -82,8 +82,12 @@ class SlideEngine {
     }
     this._cache.set(url, img);
     while (this._cache.size > this.cacheLimit) {
-      const oldest = this._cache.keys().next().value;
-      this._cache.delete(oldest);
+      const oldestKey = this._cache.keys().next().value;
+      const oldestImg = this._cache.get(oldestKey);
+      this._cache.delete(oldestKey);
+      // Drop the source so the browser can release the decoded bitmap right
+      // away instead of waiting for GC — keeps memory flat over long events.
+      if (oldestImg) oldestImg.src = '';
     }
     return img;
   }
@@ -98,6 +102,7 @@ class SlideEngine {
       if (l.kbFgAnim) l.kbFgAnim.cancel();
       if (l.trAnim) l.trAnim.cancel();
       l.el.style.opacity = '0';
+      l.el.style.willChange = '';   // release compositor layers while idle
     });
   }
 
@@ -118,6 +123,7 @@ class SlideEngine {
 
     const firstShow = payload.transition === 'none';
     if (firstShow) {
+      incoming.el.style.willChange = '';   // static slide — release promotion
       incoming.el.style.opacity = '1';
       incoming.el.style.zIndex = '2';
       outgoing.el.style.opacity = '0';
@@ -204,6 +210,11 @@ class SlideEngine {
     const name = payload.transition || 'fade';
     const ease = 'cubic-bezier(0.4, 0.0, 0.2, 1)';
 
+    // Promote only the layers and only the properties this transition touches,
+    // for just its duration — so the GPU never holds idle clip-path/filter
+    // layers between slides.
+    incoming.el.style.willChange = SlideEngine.WILL_CHANGE[name] || 'opacity, transform';
+
     // Stack incoming above outgoing.
     incoming.el.style.zIndex = '2';
     outgoing.el.style.zIndex = '1';
@@ -226,6 +237,13 @@ class SlideEngine {
           { opacity: 1, filter: 'blur(0px)' }
         ];
         break;
+      case 'zoom-blur':
+        // Premium combo: the new image swells in from a soft blur.
+        inFrames = [
+          { opacity: 0, filter: 'blur(24px)', transform: 'scale(1.18)' },
+          { opacity: 1, filter: 'blur(0px)', transform: 'scale(1)' }
+        ];
+        break;
       case 'wipe-left':
         inFrames = [{ clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)' }];
         break;
@@ -238,6 +256,13 @@ class SlideEngine {
       case 'wipe-down':
         inFrames = [{ clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0 0 0% 0)' }];
         break;
+      case 'wipe-diagonal':
+        // A diagonal edge sweeps from the top-left corner to the bottom-right.
+        inFrames = [
+          { clipPath: 'polygon(0% 0%, 0% 0%, 0% 0%)' },
+          { clipPath: 'polygon(0% 0%, 200% 0%, 0% 200%)' }
+        ];
+        break;
       case 'push-left':
         inFrames = [{ transform: 'translateX(100%)' }, { transform: 'translateX(0%)' }];
         outFrames = [{ transform: 'translateX(0%)' }, { transform: 'translateX(-100%)' }];
@@ -245,6 +270,21 @@ class SlideEngine {
       case 'push-right':
         inFrames = [{ transform: 'translateX(-100%)' }, { transform: 'translateX(0%)' }];
         outFrames = [{ transform: 'translateX(0%)' }, { transform: 'translateX(100%)' }];
+        break;
+      case 'push-up':
+        inFrames = [{ transform: 'translateY(100%)' }, { transform: 'translateY(0%)' }];
+        outFrames = [{ transform: 'translateY(0%)' }, { transform: 'translateY(-100%)' }];
+        break;
+      case 'push-down':
+        inFrames = [{ transform: 'translateY(-100%)' }, { transform: 'translateY(0%)' }];
+        outFrames = [{ transform: 'translateY(0%)' }, { transform: 'translateY(100%)' }];
+        break;
+      case 'cover-left':
+        // Incoming slides in over a stationary outgoing image.
+        inFrames = [{ transform: 'translateX(100%)' }, { transform: 'translateX(0%)' }];
+        break;
+      case 'cover-right':
+        inFrames = [{ transform: 'translateX(-100%)' }, { transform: 'translateX(0%)' }];
         break;
       case 'zoom-in':
         inFrames = [
@@ -270,20 +310,46 @@ class SlideEngine {
 
     incoming.trAnim = incoming.el.animate(inFrames, { duration: dur, easing: ease, fill: 'both' });
     if (outFrames) {
+      outgoing.el.style.willChange = 'transform';
       outgoing.trAnim = outgoing.el.animate(outFrames, { duration: dur, easing: ease, fill: 'both' });
     }
     incoming.trAnim.onfinish = () => {
       outgoing.el.style.opacity = '0';
-      // Clear lingering fill state so layer is reusable.
+      // Clear lingering fill state so the layer is reusable, and release the
+      // compositor promotion now that the layer is static again.
       incoming.el.style.clipPath = '';
       incoming.el.style.filter = '';
       incoming.el.style.transform = '';
+      incoming.el.style.willChange = '';
       if (outFrames && outgoing.trAnim) {
         outgoing.trAnim.cancel();
         outgoing.el.style.transform = '';
       }
+      outgoing.el.style.willChange = '';
     };
   }
 }
+
+// Map each transition to the minimal set of properties it animates, so the
+// engine can scope `will-change` precisely (see _runTransition).
+SlideEngine.WILL_CHANGE = {
+  'fade': 'opacity',
+  'blur-fade': 'opacity, filter',
+  'zoom-blur': 'opacity, filter, transform',
+  'wipe-left': 'clip-path',
+  'wipe-right': 'clip-path',
+  'wipe-up': 'clip-path',
+  'wipe-down': 'clip-path',
+  'wipe-diagonal': 'clip-path',
+  'circle': 'clip-path',
+  'push-left': 'transform',
+  'push-right': 'transform',
+  'push-up': 'transform',
+  'push-down': 'transform',
+  'cover-left': 'transform',
+  'cover-right': 'transform',
+  'zoom-in': 'opacity, transform',
+  'zoom-out': 'opacity, transform'
+};
 
 window.SlideEngine = SlideEngine;

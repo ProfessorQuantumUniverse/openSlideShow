@@ -24,8 +24,9 @@ Dateisystem-Zugriff. Läuft auf Windows.
   unscharfen `cover`-Hintergrund („Blur-Fill"). Alternativ Schwarz oder Füllen.
 - **Permanenter Ken-Burns-Effekt** — kontinuierliches, sanftes Zoomen & Schwenken,
   pro Bild zufällig parametrisiert. Intensität einstellbar (0–200 %).
-- **Moderne Übergänge, zufällig gewählt** — Crossfade, Blur-Fade, Wipes (4 Richtungen),
-  Push, Zoom In/Out, Iris/Kreis. Oder ein fester Effekt wählbar.
+- **Moderne Übergänge, zufällig gewählt** — 17 Effekte: Crossfade, Blur-Fade,
+  Zoom-Blur, Wipes (4 Richtungen + diagonal), Push (4 Richtungen), Cover (←/→),
+  Zoom In/Out und Iris/Kreis. Oder ein fester Effekt wählbar.
 - **Performance & Stabilität** — Bilder werden **asynchron im Hintergrund**
   vorgeladen und per `img.decode()` vorab dekodiert, bevor sie erscheinen.
   Alle Animationen laufen über `transform`/`opacity`/`clip-path`/`filter` auf

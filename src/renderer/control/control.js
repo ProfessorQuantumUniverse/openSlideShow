@@ -173,9 +173,11 @@ function applyState(s) {
   if (s.transitions && els.transSelect.options.length === 0) {
     const opt = (v, label) => { const o = document.createElement('option'); o.value = v; o.textContent = label; return o; };
     const labels = {
-      'fade': 'Crossfade', 'blur-fade': 'Blur Fade',
+      'fade': 'Crossfade', 'blur-fade': 'Blur Fade', 'zoom-blur': 'Zoom Blur',
       'wipe-left': 'Wipe ←', 'wipe-right': 'Wipe →', 'wipe-up': 'Wipe ↑', 'wipe-down': 'Wipe ↓',
-      'push-left': 'Push ←', 'push-right': 'Push →',
+      'wipe-diagonal': 'Wipe ↘ (Diagonal)',
+      'push-left': 'Push ←', 'push-right': 'Push →', 'push-up': 'Push ↑', 'push-down': 'Push ↓',
+      'cover-left': 'Cover ←', 'cover-right': 'Cover →',
       'zoom-in': 'Zoom In', 'zoom-out': 'Zoom Out', 'circle': 'Iris (Kreis)'
     };
     els.transSelect.appendChild(opt('random', '🎲 Zufällig (empfohlen)'));
