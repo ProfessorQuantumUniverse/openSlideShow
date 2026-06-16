@@ -11,16 +11,20 @@
   position: absolute;
   inset: 0;
   opacity: 1;
-  will-change: opacity, transform, clip-path, filter;
-  transform: translateZ(0);
-  backface-visibility: hidden;
+  /* No permanent `will-change` here: the layer itself is static between
+     transitions (only its Ken Burns child moves). The engine promotes it on
+     demand for the duration of a transition and releases it afterwards, so we
+     never hold an idle compositor layer for `clip-path`/`filter`. `contain`
+     lets the browser skip work outside this subtree. */
+  contain: layout paint;
 }
 
 .oss-kb {
   position: absolute;
   inset: 0;
-  will-change: transform;
+  will-change: transform;       /* always animating → keep promoted */
   backface-visibility: hidden;
+  transform: translateZ(0);
 }
 /* Background may breathe a touch by default; foreground stays an exact fit. */
 .oss-kb-bg { transform: translateZ(0) scale(1.02); }
