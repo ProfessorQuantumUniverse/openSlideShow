@@ -20,12 +20,34 @@
   "build": {
     "appId": "com.openslideshow.app",
     "productName": "OpenSlideShow",
+    "directories": {
+      "output": "dist"
+    },
     "files": [
       "src/**/*",
+      "build/icon.ico",
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OpenSlideShow"
     }
   }
 }
