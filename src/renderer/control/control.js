@@ -156,6 +156,10 @@ function applyState(s) {
   // counter
   els.curCount.textContent = s.count ? `Bild ${(s.shownCounter % s.count) || s.count} · ${s.count}` : '';
 
+  // output fullscreen button reflects current projection state
+  els.fsBtn.textContent = s.outputFullscreen ? 'Output Fenster' : 'Output Vollbild';
+  els.fsBtn.classList.toggle('btn-primary', !!s.outputFullscreen);
+
   // display info
   if (s.displays) {
     const d = s.displays;

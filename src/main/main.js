@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut } = require('electron');
 const path = require('path');
 const { scanFolder } = require('./mediaScanner');
 const { Playlist } = require('./playlist');
@@ -73,17 +73,28 @@ function createControlWindow() {
   });
 }
 
+function windowedOutputBounds() {
+  const { primary } = pickDisplays();
+  return {
+    x: primary.bounds.x + 80,
+    y: primary.bounds.y + 80,
+    width: Math.min(1280, primary.bounds.width - 160),
+    height: Math.min(720, primary.bounds.height - 160)
+  };
+}
+
 function createOutputWindow() {
   const { primary, external } = pickDisplays();
-  const target = external || primary;
   const hasExternal = Boolean(external);
+  const target = external || primary;
+  const wb = windowedOutputBounds();
 
   outputWin = new BrowserWindow({
-    x: target.bounds.x,
-    y: target.bounds.y,
-    width: hasExternal ? target.bounds.width : Math.min(1280, primary.bounds.width - 120),
-    height: hasExternal ? target.bounds.height : Math.min(720, primary.bounds.height - 120),
-    frame: !hasExternal,            // borderless only on the real output display
+    x: hasExternal ? target.bounds.x : wb.x,
+    y: hasExternal ? target.bounds.y : wb.y,
+    width: hasExternal ? target.bounds.width : wb.width,
+    height: hasExternal ? target.bounds.height : wb.height,
+    frame: false,                   // always borderless — no OS title bar, ever
     backgroundColor: '#000000',
     title: 'OpenSlideShow — Output',
     show: false,
@@ -100,24 +111,41 @@ function createOutputWindow() {
 
   outputWin.once('ready-to-show', () => {
     outputWin.show();
+    // Auto-project to full screen only when a real second display is present.
     if (hasExternal) setOutputFullscreen(true);
   });
 
   outputWin.on('closed', () => { outputWin = null; });
 }
 
+function isOutputFullscreen() {
+  return Boolean(outputWin && outputWin.isKiosk());
+}
+
 function setOutputFullscreen(on) {
   if (!outputWin) return;
   const { primary, external } = pickDisplays();
   const target = external || primary;
+
   if (on) {
-    outputWin.setMenuBarVisibility(false);
-    // Borderless fullscreen covering the whole target display.
-    outputWin.setBounds(target.workArea ? target.bounds : target.bounds);
-    outputWin.setFullScreen(true);
+    // Place the window on the target display first, then enter kiosk mode.
+    // Kiosk reliably covers the Windows taskbar and leaves no chrome — the
+    // standard approach for beamer / digital-signage output.
+    outputWin.setKiosk(false);
+    outputWin.setBounds(target.bounds);
+    outputWin.setKiosk(true);
+    outputWin.setAlwaysOnTop(true, 'screen-saver');
+    outputWin.focus();
+    // Safety net: the operator can always leave projection with Esc, even when
+    // the output covers a single monitor and the control panel is hidden.
+    globalShortcut.register('Escape', () => setOutputFullscreen(false));
   } else {
-    outputWin.setFullScreen(false);
+    globalShortcut.unregister('Escape');
+    outputWin.setAlwaysOnTop(false);
+    outputWin.setKiosk(false);
+    if (!external) outputWin.setBounds(windowedOutputBounds());
   }
+  broadcastState();
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +164,8 @@ function broadcastState() {
     current: state.current,
     config: state.config,
     transitions: TRANSITIONS,
-    displays: describeDisplays()
+    displays: describeDisplays(),
+    outputFullscreen: isOutputFullscreen()
   };
   send(controlWin, 'state:update', snapshot);
   send(outputWin, 'state:update', snapshot);
@@ -296,7 +325,8 @@ function registerIpc() {
     current: state.current,
     config: state.config,
     transitions: TRANSITIONS,
-    displays: describeDisplays()
+    displays: describeDisplays(),
+    outputFullscreen: isOutputFullscreen()
   }));
 
   ipcMain.handle('media:chooseFolder', async () => {
@@ -328,7 +358,7 @@ function registerIpc() {
 
   ipcMain.on('output:toggleFullscreen', () => {
     if (!outputWin) return;
-    setOutputFullscreen(!outputWin.isFullScreen());
+    setOutputFullscreen(!isOutputFullscreen());
   });
 
   ipcMain.handle('output:identify', () => {
@@ -370,4 +400,5 @@ app.whenReady().then(() => {
   });
 });
 
+app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());
