@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   chooseFolder: () => ipcRenderer.invoke('media:chooseFolder'),
   reloadFolder: () => ipcRenderer.invoke('media:reloadFolder'),
   identifyOutput: () => ipcRenderer.invoke('output:identify'),
+  listFonts: () => ipcRenderer.invoke('fonts:list'),
 
   // --- commands (fire and forget) ---
   play: () => ipcRenderer.send('control:play'),

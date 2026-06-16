@@ -353,3 +353,46 @@ SlideEngine.WILL_CHANGE = {
 };
 
 window.SlideEngine = SlideEngine;
+
+/**
+ * Render the custom text overlay (e.g. the event name) into a given layer.
+ * Shared by Output and the Control preview so both look identical.
+ *
+ *   layerEl  <- full-frame flex box that positions the text (the CSS container)
+ *   textEl   <- the actual text element; its size scales with the frame height
+ *
+ * Font size is expressed in `cqh` (1% of the container's height), so the same
+ * numeric value looks proportionally identical on the full-screen output and in
+ * the small preview frame.
+ */
+function applyTextOverlay(layerEl, textEl, overlay) {
+  const ov = overlay || {};
+  const text = (ov.text || '').trim();
+
+  if (!ov.enabled || !text) {
+    layerEl.style.display = 'none';
+    return;
+  }
+
+  layerEl.style.display = 'flex';
+  textEl.textContent = text;
+  textEl.style.setProperty('--ov-size', ov.fontSize != null ? ov.fontSize : 6);
+  textEl.style.color = ov.color || '#ffffff';
+  textEl.style.fontFamily = ov.fontFamily
+    ? `"${ov.fontFamily}", system-ui, sans-serif`
+    : 'system-ui, sans-serif';
+  textEl.style.fontWeight = ov.bold ? '700' : '400';
+  textEl.style.textShadow = ov.shadow
+    ? '0 0.3cqh 1.2cqh rgba(0,0,0,0.85), 0 0 0.4cqh rgba(0,0,0,0.6)'
+    : 'none';
+
+  // position: "{top|middle|bottom}-{left|center|right}"
+  const [vert, horiz] = String(ov.position || 'bottom-right').split('-');
+  const VMAP = { top: 'flex-start', middle: 'center', bottom: 'flex-end' };
+  const HMAP = { left: 'flex-start', center: 'center', right: 'flex-end' };
+  layerEl.style.alignItems = VMAP[vert] || 'flex-end';
+  layerEl.style.justifyContent = HMAP[horiz] || 'flex-end';
+  textEl.style.textAlign = horiz === 'left' ? 'left' : horiz === 'center' ? 'center' : 'right';
+}
+
+window.applyTextOverlay = applyTextOverlay;

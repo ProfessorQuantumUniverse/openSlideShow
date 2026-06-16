@@ -32,6 +32,9 @@
 
       <div class="preview-frame">
         <div id="preview" class="oss-preview"></div>
+        <div id="ovPreviewLayer" class="text-overlay-layer" style="display:none">
+          <div id="ovPreviewText" class="text-overlay"></div>
+        </div>
         <div id="previewEmpty" class="preview-empty">
           <div class="pe-title">Kein Ordner geladen</div>
           <div class="pe-sub">Wähle unten einen Bilderordner</div>
@@ -98,6 +101,58 @@
       <div class="field">
         <div class="field-label"><span>Übergangseffekt</span></div>
         <select id="transSelect" class="select"></select>
+      </div>
+
+      <div class="divider"></div>
+      <div class="card-head">
+        <h2>Text-Overlay</h2>
+        <label class="switch" title="Overlay ein-/ausblenden">
+          <input id="ovEnable" type="checkbox" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+
+      <div class="field">
+        <div class="field-label"><span>Text (z. B. Eventname)</span></div>
+        <input id="ovText" type="text" class="text-input" placeholder="z. B. Sommerfest 2026" maxlength="120" />
+      </div>
+
+      <div class="field">
+        <div class="field-label"><span>Schriftart</span></div>
+        <select id="ovFont" class="select"></select>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex:1">
+          <div class="field-label"><span>Größe</span><span id="ovSizeVal" class="field-val">6%</span></div>
+          <input id="ovSizeRange" type="range" min="2" max="20" step="0.5" value="6" />
+        </div>
+        <div class="field">
+          <div class="field-label"><span>Farbe</span></div>
+          <input id="ovColor" type="color" class="color-input" value="#ffffff" />
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-label"><span>Position</span></div>
+        <select id="ovPos" class="select">
+          <option value="top-left">Oben links</option>
+          <option value="top-center">Oben mittig</option>
+          <option value="top-right">Oben rechts</option>
+          <option value="middle-left">Mitte links</option>
+          <option value="middle-center">Mitte</option>
+          <option value="middle-right">Mitte rechts</option>
+          <option value="bottom-left">Unten links</option>
+          <option value="bottom-center">Unten mittig</option>
+          <option value="bottom-right" selected>Unten rechts</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <div class="checks">
+          <label class="check"><input id="ovBold" type="checkbox" checked /> Fett</label>
+          <label class="check"><input id="ovShadow" type="checkbox" checked /> Schatten</label>
+        </div>
       </div>
     </section>
   </main>
