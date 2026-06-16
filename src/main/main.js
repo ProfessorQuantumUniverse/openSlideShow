@@ -7,6 +7,9 @@ const { Playlist } = require('./playlist');
 
 const isDev = process.argv.includes('--dev');
 
+// App icon used for windows in dev (packaged builds embed it in the .exe).
+const APP_ICON = path.join(__dirname, '..', '..', 'build', 'icon.ico');
+
 // ---------------------------------------------------------------------------
 // Central application state (single source of truth).
 // ---------------------------------------------------------------------------
@@ -56,6 +59,7 @@ function createControlWindow() {
     y: primary.bounds.y + 60,
     backgroundColor: '#0b0d12',
     title: 'OpenSlideShow — Control',
+    icon: APP_ICON,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
