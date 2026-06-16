@@ -1,0 +1,28 @@
+{
+  "name": "openslideshow",
+  "version": "1.0.0",
+  "description": "Dynamische, live-steuerbare Präsentations-Software für Events (Dual-Monitor, Ken Burns, randomisierte Transitions).",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dist": "electron-builder --win"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.openslideshow.app",
+    "productName": "OpenSlideShow",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
