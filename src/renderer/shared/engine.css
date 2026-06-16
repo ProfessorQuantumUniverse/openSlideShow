@@ -20,9 +20,11 @@
   position: absolute;
   inset: 0;
   will-change: transform;
-  transform: translateZ(0) scale(1.04);
   backface-visibility: hidden;
 }
+/* Background may breathe a touch by default; foreground stays an exact fit. */
+.oss-kb-bg { transform: translateZ(0) scale(1.02); }
+.oss-kb-fg { transform: translateZ(0); }
 
 .oss-bg,
 .oss-fg {

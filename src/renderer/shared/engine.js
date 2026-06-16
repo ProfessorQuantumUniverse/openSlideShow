@@ -38,18 +38,27 @@ class SlideEngine {
   _makeLayer() {
     const el = document.createElement('div');
     el.className = 'oss-layer';
-    const kb = document.createElement('div');
-    kb.className = 'oss-kb';
+
+    // Background and foreground each get their OWN Ken Burns wrapper so the
+    // blurred fill can move freely (cropping is invisible) while the sharp
+    // image only does a gentle, crop-safe motion.
+    const kbBg = document.createElement('div');
+    kbBg.className = 'oss-kb oss-kb-bg';
     const bg = document.createElement('img');
     bg.className = 'oss-bg';
     bg.decoding = 'async';
+    kbBg.appendChild(bg);
+
+    const kbFg = document.createElement('div');
+    kbFg.className = 'oss-kb oss-kb-fg';
     const fg = document.createElement('img');
     fg.className = 'oss-fg';
     fg.decoding = 'async';
-    kb.appendChild(bg);
-    kb.appendChild(fg);
-    el.appendChild(kb);
-    return { el, kb, bg, fg, kbAnim: null, trAnim: null };
+    kbFg.appendChild(fg);
+
+    el.appendChild(kbBg);
+    el.appendChild(kbFg);
+    return { el, kbBg, kbFg, bg, fg, kbBgAnim: null, kbFgAnim: null, trAnim: null };
   }
 
   // ---- prefetch + decode (async, off the animation path) -----------------
@@ -85,7 +94,8 @@ class SlideEngine {
 
   clear() {
     this.layers.forEach(l => {
-      if (l.kbAnim) l.kbAnim.cancel();
+      if (l.kbBgAnim) l.kbBgAnim.cancel();
+      if (l.kbFgAnim) l.kbFgAnim.cancel();
       if (l.trAnim) l.trAnim.cancel();
       l.el.style.opacity = '0';
     });
@@ -138,21 +148,51 @@ class SlideEngine {
   }
 
   // ---- Ken Burns ----------------------------------------------------------
+  // The background (blurred cover) takes the full zoom + pan — any cropping is
+  // invisible because it is blurred. The foreground (sharp, object-fit:contain)
+  // gets a much gentler, crop-safe motion: the pan is clamped to the zoom
+  // headroom so an edge of the image is never revealed and only a few percent
+  // is ever cropped. At intensity 0 the sharp image is a pixel-perfect fit.
   _startKenBurns(layer, payload) {
-    if (layer.kbAnim) layer.kbAnim.cancel();
+    if (layer.kbBgAnim) layer.kbBgAnim.cancel();
+    if (layer.kbFgAnim) layer.kbFgAnim.cancel();
+
     const kb = payload.kenBurns || {};
     const intensity = payload.kenBurnsIntensity != null ? payload.kenBurnsIntensity : 1;
+    const dur = (payload.displayDuration || 7000) + (payload.transitionDuration || 1500) + 800;
+    const easing = 'cubic-bezier(0.33, 0, 0.2, 1)';
+
     if (intensity <= 0) {
-      layer.kb.style.transform = 'scale(1.04)';
+      layer.kbBg.style.transform = 'scale(1.02)';
+      layer.kbFg.style.transform = 'none';   // exact contain → nothing cut off
       return;
     }
-    const from = `scale(${kb.fromScale}) translate(${kb.fromX}%, ${kb.fromY}%)`;
-    const to = `scale(${kb.toScale}) translate(${kb.toX}%, ${kb.toY}%)`;
-    // Run longer than the slide so motion never visibly stops before replacement.
-    const dur = (payload.displayDuration || 7000) + (payload.transitionDuration || 1500) + 800;
-    layer.kbAnim = layer.kb.animate(
-      [{ transform: from }, { transform: to }],
-      { duration: dur, easing: 'cubic-bezier(0.33, 0, 0.2, 1)', fill: 'forwards' }
+
+    // --- background: full, expressive motion ---
+    layer.kbBgAnim = layer.kbBg.animate(
+      [
+        { transform: `scale(${kb.fromScale}) translate(${kb.fromX}%, ${kb.fromY}%)` },
+        { transform: `scale(${kb.toScale}) translate(${kb.toX}%, ${kb.toY}%)` }
+      ],
+      { duration: dur, easing, fill: 'forwards' }
+    );
+
+    // --- foreground: gentle + crop-safe ---
+    const FG = 0.34;                                   // fraction of the bg motion
+    const fgScale = (s) => 1 + (s - 1) * FG;
+    // Max pan (in %) that keeps the scaled image fully covering the frame.
+    const safePan = (p, scale) => {
+      const headroom = Math.max(0, (scale - 1) / 2 * 100) * 0.85;
+      return Math.max(-headroom, Math.min(headroom, p * FG));
+    };
+    const fFrom = fgScale(kb.fromScale);
+    const fTo = fgScale(kb.toScale);
+    layer.kbFgAnim = layer.kbFg.animate(
+      [
+        { transform: `scale(${fFrom}) translate(${safePan(kb.fromX, fFrom)}%, ${safePan(kb.fromY, fFrom)}%)` },
+        { transform: `scale(${fTo}) translate(${safePan(kb.toX, fTo)}%, ${safePan(kb.toY, fTo)}%)` }
+      ],
+      { duration: dur, easing, fill: 'forwards' }
     );
   }
 
