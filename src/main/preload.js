@@ -24,7 +24,18 @@ contextBridge.exposeInMainWorld('api', {
   toggleOutputFullscreen: () => ipcRenderer.send('output:toggleFullscreen'),
 
   // --- events ---
-  onShow: (cb) => ipcRenderer.on('show', (_e, payload) => cb(payload)),
-  onState: (cb) => ipcRenderer.on('state:update', (_e, payload) => cb(payload)),
-  onIdentify: (cb) => ipcRenderer.on('identify', (_e, payload) => cb(payload))
+  // Each channel carries exactly one logical handler. Clearing first means a
+  // window reload (or DevTools refresh) never stacks duplicate listeners.
+  onShow: (cb) => {
+    ipcRenderer.removeAllListeners('show');
+    ipcRenderer.on('show', (_e, payload) => cb(payload));
+  },
+  onState: (cb) => {
+    ipcRenderer.removeAllListeners('state:update');
+    ipcRenderer.on('state:update', (_e, payload) => cb(payload));
+  },
+  onIdentify: (cb) => {
+    ipcRenderer.removeAllListeners('identify');
+    ipcRenderer.on('identify', (_e, payload) => cb(payload));
+  }
 });

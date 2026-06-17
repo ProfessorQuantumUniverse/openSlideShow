@@ -47,11 +47,22 @@ const els = {
 let count = 0;
 
 // --- range slider fill helper --------------------------------------------
+// Only updates the --pct custom property; the gradient itself lives in CSS, so
+// this stays cheap even when fired on every pointermove during a drag.
 function paintRange(input) {
   const min = parseFloat(input.min), max = parseFloat(input.max);
   const pct = ((parseFloat(input.value) - min) / (max - min)) * 100;
-  input.style.background =
-    `linear-gradient(90deg, var(--accent) 0%, var(--accent) ${pct}%, #2a3142 ${pct}%)`;
+  input.style.setProperty('--pct', pct + '%');
+}
+
+// Trailing debounce: collapse a burst of slider/typing events into one IPC
+// round-trip to the main process. The local preview is still updated instantly.
+function debounce(fn, ms) {
+  let t = null;
+  return () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => { t = null; fn(); }, ms);
+  };
 }
 
 function setStatus(msg) { els.statusText.textContent = msg; }
@@ -76,7 +87,9 @@ function renderOverlayPreview() {
 }
 
 // --- config push ----------------------------------------------------------
-function pushConfig() {
+// Read values at fire time (after debounce) so the main process always gets the
+// latest state, never a stale snapshot captured when the burst started.
+const sendConfig = debounce(() => {
   window.api.setConfig({
     displayDuration: parseFloat(els.durRange.value) * 1000,
     transitionDuration: parseFloat(els.transRange.value) * 1000,
@@ -85,7 +98,11 @@ function pushConfig() {
     transitionMode: els.transSelect.value,
     overlay: readOverlay()
   });
-  renderOverlayPreview();
+}, 80);
+
+function pushConfig() {
+  sendConfig();          // debounced IPC to the main process
+  renderOverlayPreview(); // local preview stays perfectly live
 }
 
 // --- transport ------------------------------------------------------------
@@ -95,15 +112,22 @@ els.nextBtn.addEventListener('click', () => window.api.next());
 
 els.folderBtn.addEventListener('click', async () => {
   setStatus('Ordner wird eingelesen…');
-  const res = await window.api.chooseFolder();
-  if (res) setStatus(`${res.count} Bilder geladen.`);
-  else setStatus('Abgebrochen.');
+  try {
+    const res = await window.api.chooseFolder();
+    setStatus(res ? `${res.count} Bilder geladen.` : 'Abgebrochen.');
+  } catch {
+    setStatus('Fehler beim Einlesen des Ordners.');
+  }
 });
 
 els.reloadBtn.addEventListener('click', async () => {
   setStatus('Neu einlesen…');
-  const res = await window.api.reloadFolder();
-  if (res) setStatus(`${res.count} Bilder neu eingelesen.`);
+  try {
+    const res = await window.api.reloadFolder();
+    if (res) setStatus(`${res.count} Bilder neu eingelesen.`);
+  } catch {
+    setStatus('Fehler beim Neu-Einlesen.');
+  }
 });
 
 els.identifyBtn.addEventListener('click', () => window.api.identifyOutput());
@@ -183,7 +207,10 @@ function selectFont(name) {
 
 // --- keyboard shortcuts ---------------------------------------------------
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  const t = e.target;
+  // Don't hijack typing/selection in any editable control.
+  if (t.tagName === 'INPUT' || t.tagName === 'SELECT' ||
+      t.tagName === 'TEXTAREA' || t.isContentEditable) return;
   switch (e.key) {
     case ' ': e.preventDefault(); window.api.togglePlay(); break;
     case 'ArrowRight': window.api.next(); break;

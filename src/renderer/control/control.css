@@ -191,7 +191,10 @@ body {
 input[type="range"] {
   -webkit-appearance: none; appearance: none;
   width: 100%; height: 6px; border-radius: 6px;
-  background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 50%, #2a3142 50%);
+  /* Fill percentage is driven by the --pct custom property (set in JS), so the
+     filled-track gradient never has to be rebuilt as a string on every input. */
+  --pct: 50%;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent) var(--pct), #2a3142 var(--pct));
   outline: none;
 }
 input[type="range"]::-webkit-slider-thumb {

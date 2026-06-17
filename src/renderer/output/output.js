@@ -34,5 +34,5 @@ window.api.getState().then((s) => {
   if (s && s.config) applyTextOverlay(overlayLayer, overlayText, s.config.overlay);
 });
 
-// Safety: keep the cursor hidden even if focus changes.
-document.addEventListener('mousemove', () => { document.body.style.cursor = 'none'; });
+// The cursor is hidden globally via `cursor: none` in output.css — no per-move
+// JS handler needed (it only re-set a value the CSS already enforced).

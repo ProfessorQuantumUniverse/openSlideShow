@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { execFile } = require('child_process');
 const { scanFolder } = require('./mediaScanner');
 const { Playlist } = require('./playlist');
@@ -55,12 +56,20 @@ let advanceTimer = null;
 // ---------------------------------------------------------------------------
 // Window management
 // ---------------------------------------------------------------------------
+// Enumerating displays is a synchronous OS round-trip, and we read it many
+// times per operation (window placement, broadcasts, fullscreen toggles).
+// Cache it and invalidate only when the display topology actually changes.
+let _displayCache = null;
 function pickDisplays() {
+  if (_displayCache) return _displayCache;
   const displays = screen.getAllDisplays();
-  const primary = screen.getPrimaryDisplay();
-  const external = displays.find(d => d.id !== primary.id) || null;
-  return { primary, external, all: displays };
+  const primary = screen.getPrimaryDisplay() || displays[0];
+  const external = displays.find(d => primary && d.id !== primary.id) || null;
+  _displayCache = { primary, external, all: displays };
+  return _displayCache;
 }
+
+function invalidateDisplays() { _displayCache = null; }
 
 function createControlWindow() {
   const { primary } = pickDisplays();
@@ -236,7 +245,11 @@ function listSystemFonts() {
   if (_fontsCache) return Promise.resolve(_fontsCache);
   return new Promise((resolve) => {
     const done = (names) => {
-      const list = names && names.length ? cleanFontList(names) : FALLBACK_FONTS.slice();
+      const ok = names && names.length;
+      if (!ok) {
+        console.warn('[fonts] system enumeration failed — using fallback list.');
+      }
+      const list = ok ? cleanFontList(names) : FALLBACK_FONTS.slice();
       _fontsCache = list;
       resolve(list);
     };
@@ -269,17 +282,22 @@ function listSystemFonts() {
 // ---------------------------------------------------------------------------
 function rand(min, max) { return min + Math.random() * (max - min); }
 
+// Ken Burns tuning. The base overscan keeps the frame fully covered so panning
+// never reveals an edge; zoom and pan both scale linearly with the intensity.
+const KB_BASE_SCALE = 1.06;          // permanent overscan, even at low intensity
+const KB_ZOOM_PER_INTENSITY = 0.10;  // extra zoom on top of the base, per intensity unit
+const KB_PAN_PER_INTENSITY = 4.0;    // max pan in % of the frame, per intensity unit
+
 function makeKenBurns() {
   const intensity = state.config.kenBurnsIntensity;
   if (intensity <= 0) {
     return { fromScale: 1.0, toScale: 1.0, fromX: 0, fromY: 0, toX: 0, toY: 0 };
   }
-  // Base zoom + pan, scaled by intensity. Always covers the frame (scale >= ~1.08).
-  const zoom = 0.10 * intensity;
-  const pan = 4.0 * intensity; // percent of frame
+  const zoom = KB_ZOOM_PER_INTENSITY * intensity;
+  const pan = KB_PAN_PER_INTENSITY * intensity; // percent of frame
   const zoomIn = Math.random() < 0.5;
-  const fromScale = zoomIn ? 1.06 : 1.06 + zoom;
-  const toScale = zoomIn ? 1.06 + zoom : 1.06;
+  const fromScale = zoomIn ? KB_BASE_SCALE : KB_BASE_SCALE + zoom;
+  const toScale = zoomIn ? KB_BASE_SCALE + zoom : KB_BASE_SCALE;
   const dir = () => (Math.random() < 0.5 ? -1 : 1);
   return {
     fromScale,
@@ -456,6 +474,20 @@ function parseCliFolder() {
   return arg ? arg.slice('--folder='.length) : null;
 }
 
+function isUsableFolder(p) {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// Keep the display cache fresh and both windows in sync when monitors change.
+function onDisplaysChanged() {
+  invalidateDisplays();
+  broadcastState();
+}
+
 app.whenReady().then(() => {
   registerIpc();
   createControlWindow();
@@ -464,14 +496,18 @@ app.whenReady().then(() => {
   // Optional auto-start: --folder="C:\path" (kiosk / unattended use).
   const cliFolder = parseCliFolder();
   if (cliFolder) {
-    outputWin.webContents.once('did-finish-load', () => {
-      loadFolder(cliFolder).then(() => play()).catch(() => {});
-    });
+    if (!isUsableFolder(cliFolder)) {
+      console.warn(`[cli] --folder path is not a readable directory: ${cliFolder}`);
+    } else {
+      outputWin.webContents.once('did-finish-load', () => {
+        loadFolder(cliFolder).then(() => play()).catch(() => {});
+      });
+    }
   }
 
-  screen.on('display-added', broadcastState);
-  screen.on('display-removed', broadcastState);
-  screen.on('display-metrics-changed', broadcastState);
+  screen.on('display-added', onDisplaysChanged);
+  screen.on('display-removed', onDisplaysChanged);
+  screen.on('display-metrics-changed', onDisplaysChanged);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -481,5 +517,11 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  // Release the screen listeners so they don't accumulate across relaunches.
+  screen.removeListener('display-added', onDisplaysChanged);
+  screen.removeListener('display-removed', onDisplaysChanged);
+  screen.removeListener('display-metrics-changed', onDisplaysChanged);
+});
 app.on('window-all-closed', () => app.quit());

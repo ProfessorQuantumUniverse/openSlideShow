@@ -103,6 +103,8 @@ class SlideEngine {
       if (l.trAnim) l.trAnim.cancel();
       l.el.style.opacity = '0';
       l.el.style.willChange = '';   // release compositor layers while idle
+      l.kbBg.style.willChange = '';
+      l.kbFg.style.willChange = '';
     });
   }
 
@@ -165,14 +167,23 @@ class SlideEngine {
 
     const kb = payload.kenBurns || {};
     const intensity = payload.kenBurnsIntensity != null ? payload.kenBurnsIntensity : 1;
-    const dur = (payload.displayDuration || 7000) + (payload.transitionDuration || 1500) + 800;
+    // Run the motion a touch past the slide+transition so it never visibly
+    // freezes before the next image takes over.
+    const dur = (payload.displayDuration || 7000) + (payload.transitionDuration || 1500) + SlideEngine.KB_TAIL_MS;
     const easing = 'cubic-bezier(0.33, 0, 0.2, 1)';
 
     if (intensity <= 0) {
+      // A static slide needs no compositor promotion — release it.
+      layer.kbBg.style.willChange = '';
+      layer.kbFg.style.willChange = '';
       layer.kbBg.style.transform = 'scale(1.02)';
       layer.kbFg.style.transform = 'none';   // exact contain → nothing cut off
       return;
     }
+
+    // Promote only the moving wrappers, and only while they actually animate.
+    layer.kbBg.style.willChange = 'transform';
+    layer.kbFg.style.willChange = 'transform';
 
     // --- background: full, expressive motion ---
     layer.kbBgAnim = layer.kbBg.animate(
@@ -200,6 +211,11 @@ class SlideEngine {
       ],
       { duration: dur, easing, fill: 'forwards' }
     );
+
+    // Once the motion settles the wrapper is static again — drop the promotion
+    // so we never hold idle compositor layers between slides.
+    layer.kbBgAnim.onfinish = () => { layer.kbBg.style.willChange = ''; };
+    layer.kbFgAnim.onfinish = () => { layer.kbFg.style.willChange = ''; };
   }
 
   // ---- Transitions --------------------------------------------------------
@@ -329,6 +345,10 @@ class SlideEngine {
     };
   }
 }
+
+// Extra time the Ken Burns motion runs beyond the slide + transition so it
+// never visibly stops before the next image arrives.
+SlideEngine.KB_TAIL_MS = 800;
 
 // Map each transition to the minimal set of properties it animates, so the
 // engine can scope `will-change` precisely (see _runTransition).

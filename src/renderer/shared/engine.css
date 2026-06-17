@@ -22,13 +22,14 @@
 .oss-kb {
   position: absolute;
   inset: 0;
-  will-change: transform;       /* always animating → keep promoted */
+  /* No permanent `will-change`: the engine promotes each wrapper only while its
+     Ken Burns animation is actually running and releases it on finish, so idle
+     slides (and intensity 0) never hold a compositor layer. */
   backface-visibility: hidden;
-  transform: translateZ(0);
 }
 /* Background may breathe a touch by default; foreground stays an exact fit. */
-.oss-kb-bg { transform: translateZ(0) scale(1.02); }
-.oss-kb-fg { transform: translateZ(0); }
+.oss-kb-bg { transform: scale(1.02); }
+.oss-kb-fg { transform: none; }
 
 .oss-bg,
 .oss-fg {
