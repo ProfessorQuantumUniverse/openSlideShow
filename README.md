@@ -12,6 +12,12 @@ Dual-Monitor · Ken Burns · randomisierte Transitions · Text-Overlay — in Ec
 ![Lizenz](https://img.shields.io/badge/Lizenz-MIT-22c55e)
 ![Status](https://img.shields.io/badge/Status-Live--ready-7C3AED)
 
+<!-- INSTALL BUTTONS START -->
+<p align="center">
+  <a href="https://github.com/ProfessorQuantumUniverse/openSlideShow/releases/latest"><img src="https://img.shields.io/badge/Download-for%20Windows-0078D6?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0wIDBoMTEuNHYxMS40SDB6TTEyLjYgMEgyNHYxMS40SDEyLjZ6TTAgMTIuNmgxMS40VjI0SDB6TTEyLjYgMTIuNkgyNFYyNEgxMi42eiIvPjwvc3ZnPg%3D%3D&logoColor=white" alt="Download for Windows" height="40"></a>
+</p>
+<!-- INSTALL BUTTONS END -->
+
 </div>
 
 <div align="center">
