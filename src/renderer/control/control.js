@@ -251,7 +251,12 @@ function applyState(s) {
 
   // folder
   if (s.folder) {
-    els.folderInfo.innerHTML = `<strong>${s.count}</strong> Bilder<br>${s.folder}`;
+    // Build nodes instead of innerHTML so the folder path is always plain text.
+    const count = document.createElement('strong');
+    count.textContent = String(s.count);
+    els.folderInfo.replaceChildren(
+      count, ' Bilder', document.createElement('br'), String(s.folder)
+    );
     els.previewEmpty.classList.toggle('hidden', s.count > 0);
   } else {
     els.folderInfo.textContent = 'Noch kein Ordner ausgewählt.';
