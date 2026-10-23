@@ -10,6 +10,8 @@ const els = {
   folderBtn: $('folderBtn'),
   reloadBtn: $('reloadBtn'),
   folderInfo: $('folderInfo'),
+  orderSelect: $('orderSelect'),
+  orderHint: $('orderHint'),
   playBtn: $('playBtn'),
   playIcon: $('playIcon'),
   pauseIcon: $('pauseIcon'),
@@ -96,6 +98,7 @@ const sendConfig = debounce(() => {
     kenBurnsIntensity: parseFloat(els.kbRange.value),
     backgroundMode: els.bgSeg.querySelector('.seg.active').dataset.val,
     transitionMode: els.transSelect.value,
+    sortOrder: els.orderSelect.value,
     overlay: readOverlay()
   });
 }, 80);
@@ -128,6 +131,16 @@ els.reloadBtn.addEventListener('click', async () => {
   } catch {
     setStatus('Fehler beim Neu-Einlesen.');
   }
+});
+
+// Date orders need a word on where the date comes from; the others are obvious.
+function renderOrderHint() {
+  els.orderHint.classList.toggle('hidden', !els.orderSelect.value.startsWith('date-'));
+}
+
+els.orderSelect.addEventListener('change', () => {
+  renderOrderHint();
+  pushConfig();
 });
 
 els.identifyBtn.addEventListener('click', () => window.api.identifyOutput());
@@ -314,6 +327,8 @@ function syncConfigControls(cfg) {
     s.classList.toggle('active', s.dataset.val === cfg.backgroundMode);
   });
   if (els.transSelect.options.length) els.transSelect.value = cfg.transitionMode;
+  if (cfg.sortOrder) els.orderSelect.value = cfg.sortOrder;
+  renderOrderHint();
 
   // overlay
   const ov = cfg.overlay || {};

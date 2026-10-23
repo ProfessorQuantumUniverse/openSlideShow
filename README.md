@@ -9,7 +9,7 @@ Dual-Monitor · Ken Burns · randomisierte Transitions · Text-Overlay — in Ec
 
 ![Plattform](https://img.shields.io/badge/Plattform-Windows-0078D6?logo=windows&logoColor=white)
 ![Electron](https://img.shields.io/badge/Electron-42-47848F?logo=electron&logoColor=white)
-![Lizenz](https://img.shields.io/badge/Lizenz-MIT-22c55e)
+![Lizenz](https://img.shields.io/badge/Lizenz-GPL--3.0-22c55e)
 ![Status](https://img.shields.io/badge/Status-Live--ready-7C3AED)
 
 <!-- INSTALL BUTTONS START -->
@@ -40,7 +40,11 @@ Animationen und direkter Dateisystem-Zugriff. Läuft auf Windows.
   - **Output-Screen** (Monitor 2 / Beamer): rahmenloses Vollbild, **kein** UI, **kein** Mauszeiger.
   - Bei nur einem Monitor läuft der Output als Fenster (Dev/Test) — per Knopf in den Beamer-Vollbildmodus schaltbar.
 - 🎞️ **Robustes Medien-Handling** — liest einen lokalen Ordner (rekursiv) mit Bildern beliebiger
-  Größe/Auflösung/Seitenverhältnis. Reihenfolge **randomisiert** (Fisher–Yates, keine direkten Wiederholungen).
+  Größe/Auflösung/Seitenverhältnis.
+- 🔀 **Wählbare Reihenfolge** — **zufällig gemischt** (Fisher–Yates, keine direkten Wiederholungen),
+  nach **Name** (A → Z / Z → A) oder nach **Bilddatum** (älteste → neueste / neueste → älteste).
+  Als Datum gilt die Aufnahmezeit der Kamera (EXIF), sonst das Änderungsdatum der Datei.
+  Umschalten wirkt live: das aktuelle Bild bleibt stehen, das nächste folgt der neuen Reihenfolge.
 - 🌫️ **Keine hässlichen schwarzen Ränder** — sharp `contain`-Bild vor einem unscharfen `cover`-Hintergrund
   („Blur-Fill"). Alternativ Schwarz oder Füllen.
 - 🔍 **Permanenter Ken-Burns-Effekt** — kontinuierliches, sanftes Zoomen & Schwenken, pro Bild zufällig
@@ -138,7 +142,8 @@ src/
                      zentral, damit Output & Vorschau identisch rendern.
     preload.js       Sichere contextBridge-API (keine Node-APIs im Renderer).
     mediaScanner.js  Ordner-Scan (rekursiv) → file://-URLs.
-    playlist.js      Randomisierte Wiedergabe-Reihenfolge.
+    playlist.js      Wiedergabe-Reihenfolge (zufällig oder nach Name/Datum sortiert).
+    imageDate.js     Bilddatum fürs Sortieren (EXIF-Aufnahmezeit, sonst Änderungsdatum).
   renderer/
     shared/
       engine.js      SlideEngine: Double-Buffering, Prefetch+Decode, Ken Burns,
@@ -162,4 +167,5 @@ Fenster — so bleibt die Vorschau exakt synchron zum Output.
 
 ## 📄 Lizenz
 
-MIT — frei nutzbar, anpassbar und weitergebbar.
+[GNU GPL v3](LICENSE) — frei nutzbar, anpassbar und weitergebbar; abgeleitete Werke müssen
+ebenfalls unter der GPL v3 stehen.

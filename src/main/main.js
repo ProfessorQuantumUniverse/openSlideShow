@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 const { scanFolder } = require('./mediaScanner');
-const { Playlist } = require('./playlist');
+const { readImageDate } = require('./imageDate');
+const { Playlist, SORT_ORDERS, needsDates, buildSequence } = require('./playlist');
 
 const isDev = process.argv.includes('--dev');
 
@@ -25,7 +26,7 @@ const TRANSITIONS = [
 
 const state = {
   folder: null,
-  media: [],            // [{path,url,name,size}]
+  media: [],            // [{path,url,name,size,mtime,date?}]
   playlist: new Playlist(),
   isPlaying: false,
   shownCounter: 0,      // how many images have been shown since folder load
@@ -36,6 +37,7 @@ const state = {
     kenBurnsIntensity: 1.0,
     backgroundMode: 'blur',     // 'blur' | 'solid' | 'stretch'
     transitionMode: 'random',   // 'random' | one of TRANSITIONS
+    sortOrder: 'random',        // one of SORT_ORDERS (see playlist.js)
     overlay: {                  // custom text overlay (e.g. the event name)
       enabled: false,
       text: '',
@@ -388,14 +390,49 @@ function pause() {
 }
 
 // ---------------------------------------------------------------------------
+// Play order
+// ---------------------------------------------------------------------------
+// Picture dates cost a file read each, so they're only read once a date order
+// is actually chosen, and then cached on the media items of this folder load.
+const DATE_READ_CONCURRENCY = 16;
+
+async function ensureDates(media) {
+  const todo = media.filter(m => m.date == null);
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      const item = todo[next++];
+      item.date = await readImageDate(item);
+    }
+  };
+  const workers = Math.min(DATE_READ_CONCURRENCY, todo.length);
+  await Promise.all(Array.from({ length: workers }, worker));
+}
+
+async function sequenceFor(media, sortOrder) {
+  if (needsDates(sortOrder)) await ensureDates(media);
+  return buildSequence(media, sortOrder);
+}
+
+async function applySortOrder() {
+  const media = state.media;
+  const sortOrder = state.config.sortOrder;
+  const sequence = await sequenceFor(media, sortOrder);
+  // A folder load or another order change may have happened while dates were read.
+  if (media !== state.media || sortOrder !== state.config.sortOrder) return;
+  state.playlist.reorder(sequence);
+}
+
+// ---------------------------------------------------------------------------
 // Loading media
 // ---------------------------------------------------------------------------
 async function loadFolder(folderPath) {
   const media = await scanFolder(folderPath);
+  const sequence = await sequenceFor(media, state.config.sortOrder);
   state.folder = folderPath;
   state.media = media;
   state.shownCounter = 0;
-  state.playlist.load(media.length);
+  state.playlist.load(media.length, sequence);
   clearTimer();
 
   if (media.length > 0) {
@@ -447,7 +484,12 @@ function registerIpc() {
   ipcMain.on('control:prev', () => advance(-1, true));
 
   ipcMain.on('config:set', (_e, partial) => {
+    const prevOrder = state.config.sortOrder;
     Object.assign(state.config, partial || {});
+    if (!SORT_ORDERS.includes(state.config.sortOrder)) state.config.sortOrder = prevOrder;
+    if (state.config.sortOrder !== prevOrder) {
+      applySortOrder().catch(err => console.warn('[order] re-sorting failed:', err));
+    }
     // Live re-time if the display duration changed while playing.
     if (state.isPlaying) scheduleNext();
     broadcastState();

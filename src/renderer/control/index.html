@@ -68,6 +68,18 @@
       </div>
       <div id="folderInfo" class="folder-info">Noch kein Ordner ausgewählt.</div>
 
+      <div class="field order-field">
+        <div class="field-label"><span>Reihenfolge</span></div>
+        <select id="orderSelect" class="select">
+          <option value="random" selected>🎲 Zufällig gemischt</option>
+          <option value="name-asc">Name: A → Z</option>
+          <option value="name-desc">Name: Z → A</option>
+          <option value="date-asc">Datum: älteste → neueste</option>
+          <option value="date-desc">Datum: neueste → älteste</option>
+        </select>
+        <div id="orderHint" class="field-hint hidden">Aufnahmedatum der Kamera (EXIF), sonst Änderungsdatum der Datei.</div>
+      </div>
+
       <div class="divider"></div>
       <div class="card-head"><h2>Timing</h2></div>
 
