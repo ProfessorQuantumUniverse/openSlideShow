@@ -182,6 +182,8 @@ body {
 .divider { height: 1px; background: var(--line); margin: 18px 0; }
 
 .field { margin-bottom: 16px; }
+.order-field { margin-top: 16px; margin-bottom: 0; }
+.field-hint { margin-top: 6px; font-size: 12px; color: var(--txt-mute); line-height: 1.4; }
 .field-label {
   display: flex; justify-content: space-between; align-items: center;
   font-size: 13px; margin-bottom: 8px; color: var(--txt);

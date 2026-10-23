@@ -19,7 +19,7 @@ const MAX_FILE_BYTES = 256 * 1024 * 1024; // 256 MB
  * @param {string} folderPath absolute path to a directory
  * @param {object} [opts]
  * @param {boolean} [opts.recursive=true]
- * @returns {Promise<Array<{path:string, url:string, name:string, size:number}>>}
+ * @returns {Promise<Array<{path:string, url:string, name:string, size:number, mtime:number}>>}
  */
 async function scanFolder(folderPath, opts = {}) {
   const recursive = opts.recursive !== false;
@@ -48,9 +48,11 @@ async function scanFolder(folderPath, opts = {}) {
       if (!IMAGE_EXTENSIONS.has(ext)) continue;
 
       let size = 0;
+      let mtime = 0;
       try {
         const stat = await fs.promises.stat(full);
         size = stat.size;
+        mtime = stat.mtimeMs;
       } catch {
         continue; // file vanished between readdir and stat
       }
@@ -60,7 +62,8 @@ async function scanFolder(folderPath, opts = {}) {
         path: full,
         url: pathToFileURL(full).href,
         name: entry.name,
-        size
+        size,
+        mtime
       });
     }
 
@@ -72,8 +75,10 @@ async function scanFolder(folderPath, opts = {}) {
 
   await walk(folderPath);
 
-  // Stable alphabetical base order; randomisation happens in the playlist layer.
-  results.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  // Stable alphabetical base order (equal names in different subfolders are
+  // tie-broken by path); the play order is derived from it in the playlist layer.
+  const collate = (a, b) => a.localeCompare(b, undefined, { numeric: true });
+  results.sort((a, b) => collate(a.name, b.name) || collate(a.path, b.path));
   return results;
 }
 
