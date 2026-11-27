@@ -142,6 +142,15 @@ eingebettet — neu generierbar mit:
 pwsh build/generate-icon.ps1
 ```
 
+### Release veröffentlichen
+
+Releases entstehen automatisch: Sobald auf `main` eine Version in `package.json` steht, für die es
+noch kein Release gibt, baut der Workflow `Release` den Installer und veröffentlicht ihn als GitHub-Release
+(Tag = Versionsnummer, z. B. `1.4.0`). Die Release-Notes kommen aus `release-notes/<version>.md`
+(erste Zeile `# Titel`, danach der Text); SHA-256 und Download-Hinweis hängt der Workflow selbst an.
+Fehlt die Datei, erzeugt GitHub die Notes aus den PRs. Neues Release also: Version bumpen, Notes
+anlegen, mergen.
+
 > [!NOTE]
 > Die `.exe` ist nicht code-signiert → Windows SmartScreen zeigt beim ersten Start eine Warnung
 > („Unbekannter Herausgeber"). Für den Eigengebrauch unproblematisch; für öffentliche Verteilung
