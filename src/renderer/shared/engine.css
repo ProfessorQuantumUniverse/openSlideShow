@@ -55,6 +55,20 @@
   filter: drop-shadow(0 18px 50px rgba(0, 0, 0, 0.55));
 }
 
+/* --- video slides --- */
+/* A layer shows either the <img> pair or the video + its canvas fill. */
+.oss-layer.is-video .oss-bg-img,
+.oss-layer.is-video .oss-fg-img,
+.oss-layer:not(.is-video) .oss-bg-video { display: none; }
+
+.oss-video {
+  /* No drop-shadow on video: a filter on a playing video would be recomputed
+     every frame and keep it off the compositor's fast video path. */
+  filter: none;
+  background: transparent;
+  pointer-events: none;
+}
+
 /* --- background modes --- */
 .mode-blur .oss-bg { display: block; }
 

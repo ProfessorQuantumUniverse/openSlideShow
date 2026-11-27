@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('api', {
   prev: () => ipcRenderer.send('control:prev'),
   setConfig: (partial) => ipcRenderer.send('config:set', partial),
   toggleOutputFullscreen: () => ipcRenderer.send('output:toggleFullscreen'),
+  // Video playback report from the engine: {token, type, time, duration, message?}
+  reportVideo: (ev) => ipcRenderer.send('media:video', ev),
 
   // --- events ---
   // Each channel carries exactly one logical handler. Clearing first means a
@@ -33,6 +35,10 @@ contextBridge.exposeInMainWorld('api', {
   onState: (cb) => {
     ipcRenderer.removeAllListeners('state:update');
     ipcRenderer.on('state:update', (_e, payload) => cb(payload));
+  },
+  onVideoProgress: (cb) => {
+    ipcRenderer.removeAllListeners('video:progress');
+    ipcRenderer.on('video:progress', (_e, payload) => cb(payload));
   },
   onIdentify: (cb) => {
     ipcRenderer.removeAllListeners('identify');

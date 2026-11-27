@@ -12,17 +12,19 @@ const TAG_DATETIME = 0x0132;          // IFD0: last modification by the camera/e
 const TAG_DATETIME_ORIGINAL = 0x9003; // Exif IFD: moment the photo was taken
 
 /**
- * Best-effort "picture date" for sorting: the Exif capture time of a JPEG,
- * otherwise the file's modification time (which survives copying on Windows,
- * unlike the creation time). Never throws.
+ * Best-effort "picture date" for sorting: the Exif capture time of a JPEG or
+ * the recording time stored in an MP4/MOV, otherwise the file's modification
+ * time (which survives copying on Windows, unlike the creation time). Never throws.
  *
- * @param {{path:string, mtime:number}} item
+ * @param {{path:string, type?:'image'|'video', mtime:number}} item
  * @returns {Promise<number>} epoch milliseconds
  */
-async function readImageDate(item) {
+async function readMediaDate(item) {
   try {
-    const exif = await readExifDate(item.path);
-    if (exif != null) return exif;
+    const date = item.type === 'video'
+      ? await readMp4Date(item.path)
+      : await readExifDate(item.path);
+    if (date != null) return date;
   } catch {
     // unreadable or malformed file: fall through to mtime
   }
@@ -113,4 +115,77 @@ function parseExifTimestamp(raw) {
   return new Date(y, mo - 1, d, h, mi, s).getTime();
 }
 
-module.exports = { readImageDate };
+// ---------------------------------------------------------------------------
+// MP4 / MOV / M4V: creation time of the movie header box (moov > mvhd)
+// ---------------------------------------------------------------------------
+// The file is a flat list of boxes; `moov` can sit at the start (fast-start)
+// or after multi-GB of media data, so we hop from header to header with tiny
+// positioned reads instead of reading the file.
+const MAX_TOP_LEVEL_BOXES = 64;
+const MP4_EPOCH_OFFSET_S = 2082844800;   // seconds between 1904-01-01 and 1970-01-01
+
+async function readMp4Date(file) {
+  const fh = await fs.promises.open(file, 'r');
+  try {
+    const { size: fileSize } = await fh.stat();
+    const head = Buffer.alloc(16);
+
+    // Reads the box header at `off`; returns null at the end or on garbage.
+    const readBox = async (off, end) => {
+      if (off + 8 > end) return null;
+      const { bytesRead } = await fh.read(head, 0, 16, off);
+      if (bytesRead < 8) return null;
+      let size = head.readUInt32BE(0);
+      let headerSize = 8;
+      if (size === 1) {
+        if (bytesRead < 16) return null;
+        size = Number(head.readBigUInt64BE(8));
+        headerSize = 16;
+      } else if (size === 0) {
+        size = end - off; // box extends to the end of its parent
+      }
+      if (size < headerSize || off + size > end) return null;
+      return { type: head.toString('latin1', 4, 8), start: off + headerSize, end: off + size };
+    };
+
+    let off = 0;
+    for (let i = 0; i < MAX_TOP_LEVEL_BOXES; i++) {
+      const box = await readBox(off, fileSize);
+      if (!box) return null;
+      if (i === 0 && box.type !== 'ftyp' && box.type !== 'moov' &&
+          box.type !== 'wide' && box.type !== 'mdat' && box.type !== 'free') {
+        return null; // not an ISO-BMFF / QuickTime file (e.g. WebM, MKV)
+      }
+      if (box.type === 'moov') {
+        for (let c = box.start, j = 0; j < MAX_TOP_LEVEL_BOXES; j++) {
+          const child = await readBox(c, box.end);
+          if (!child) return null;
+          if (child.type === 'mvhd') return parseMvhd(fh, child.start);
+          c = child.end;
+        }
+        return null;
+      }
+      off = box.end;
+    }
+    return null;
+  } finally {
+    await fh.close();
+  }
+}
+
+/** mvhd: version(1) flags(3) creation_time(4, or 8 in version 1), in s since 1904 (UTC). */
+async function parseMvhd(fh, start) {
+  const buf = Buffer.alloc(12);
+  const { bytesRead } = await fh.read(buf, 0, 12, start);
+  if (bytesRead < 8) return null;
+  const secs = buf[0] === 1
+    ? (bytesRead < 12 ? 0 : Number(buf.readBigUInt64BE(4)))
+    : buf.readUInt32BE(4);
+  if (!secs) return null; // many encoders leave it at 0
+  const ms = (secs - MP4_EPOCH_OFFSET_S) * 1000;
+  // Reject obviously bogus values (pre-1971 or in the future).
+  if (ms < Date.UTC(1971, 0, 1) || ms > Date.now() + 24 * 3600 * 1000) return null;
+  return ms;
+}
+
+module.exports = { readMediaDate };

@@ -5,7 +5,7 @@
 # OpenSlideShow
 
 **Dynamische, live-steuerbare Präsentations-Software für Events.**
-Dual-Monitor · Ken Burns · randomisierte Transitions · Text-Overlay — in Echtzeit bedienbar.
+Dual-Monitor · Bilder & Videos · Ken Burns · randomisierte Transitions · Text-Overlay — in Echtzeit bedienbar.
 
 ![Plattform](https://img.shields.io/badge/Plattform-Windows-0078D6?logo=windows&logoColor=white)
 ![Electron](https://img.shields.io/badge/Electron-42-47848F?logo=electron&logoColor=white)
@@ -39,22 +39,37 @@ Animationen und direkter Dateisystem-Zugriff. Läuft auf Windows.
   - **Control-Panel** (Monitor 1): modernes Dashboard mit Live-Vorschau, Transport-Steuerung und Konfiguration.
   - **Output-Screen** (Monitor 2 / Beamer): rahmenloses Vollbild, **kein** UI, **kein** Mauszeiger.
   - Bei nur einem Monitor läuft der Output als Fenster (Dev/Test) — per Knopf in den Beamer-Vollbildmodus schaltbar.
-- 🎞️ **Robustes Medien-Handling** — liest einen lokalen Ordner (rekursiv) mit Bildern beliebiger
-  Größe/Auflösung/Seitenverhältnis.
+- 🎞️ **Robustes Medien-Handling** — liest einen lokalen Ordner (rekursiv) mit Bildern und Videos
+  beliebiger Größe/Auflösung/Seitenverhältnis.
+- 🎥 **Videos, nativ abgespielt** — Videos im Ordner laufen ganz normal in der Show mit und werden
+  **immer vollständig** abgespielt; danach geht es automatisch weiter. Wiedergabe über Chromiums
+  eingebaute Media-Pipeline mit **Hardware-Dekodierung** — kein externer Player, kein Transcoding.
+  - Formate: **MP4 / M4V / MOV** (H.264, H.265¹, AV1), **WebM / MKV** (VP8, VP9, AV1), **OGV**.
+  - Alle Übergänge funktionieren auch mit Videos; der Ton des ausgehenden Videos wird weich ausgeblendet.
+  - **Blur-Fill** auch für Hochformat-Videos: der Hintergrund wird live aus dem laufenden Video
+    erzeugt (GPU-Downsampling, kein zweiter Decoder).
+  - **Ton** an/aus und **Lautstärke** live im Control-Panel; die Vorschau bleibt stumm.
+  - **Pause** hält auch das Video an; die Vorschau zeigt Laufzeit und Fortschrittsbalken.
+  - Kaputte oder nicht unterstützte Dateien werden automatisch übersprungen, ein hängendes Video
+    nach 12 s ohne Fortschritt ebenfalls — die Show bleibt nie stehen.
+
+  <sub>¹ H.265/HEVC nur, wenn Grafikkarte/Windows die Hardware-Dekodierung unterstützen.</sub>
 - 🔀 **Wählbare Reihenfolge** — **zufällig gemischt** (Fisher–Yates, keine direkten Wiederholungen),
-  nach **Name** (A → Z / Z → A) oder nach **Bilddatum** (älteste → neueste / neueste → älteste).
-  Als Datum gilt die Aufnahmezeit der Kamera (EXIF), sonst das Änderungsdatum der Datei.
+  nach **Name** (A → Z / Z → A) oder nach **Datum** (älteste → neueste / neueste → älteste).
+  Als Datum gilt die Aufnahmezeit der Kamera (EXIF bei Fotos, Aufnahmezeit im MP4/MOV bei Videos),
+  sonst das Änderungsdatum der Datei.
   Umschalten wirkt live: das aktuelle Bild bleibt stehen, das nächste folgt der neuen Reihenfolge.
 - 🌫️ **Keine hässlichen schwarzen Ränder** — sharp `contain`-Bild vor einem unscharfen `cover`-Hintergrund
   („Blur-Fill"). Alternativ Schwarz oder Füllen.
 - 🔍 **Permanenter Ken-Burns-Effekt** — kontinuierliches, sanftes Zoomen & Schwenken, pro Bild zufällig
-  parametrisiert. Intensität einstellbar (0–200 %).
+  parametrisiert. Intensität einstellbar (0–200 %). Videos bleiben ruhig (sie bewegen sich ja selbst).
 - 🎬 **Moderne Übergänge, zufällig gewählt** — Crossfade, Blur-Fade, Wipes (4 Richtungen), Push,
   Zoom In/Out, Iris/Kreis. Oder ein fester Effekt wählbar.
 - 🔤 **Text-Overlay** — z. B. der Eventname, dauerhaft eingeblendet. Frei wählbare **System-Schriftart**,
   Größe, Farbe, eine von **9 Positionen**, optional **fett** und mit **Schatten**.
 - ⚡ **Performance & Stabilität** — Bilder werden **asynchron im Hintergrund** vorgeladen und per
-  `img.decode()` vorab dekodiert. Alle Animationen laufen über `transform`/`opacity`/`clip-path`/`filter`
+  `img.decode()` vorab dekodiert; das nächste Video wird bis zum ersten Frame vorgeladen, sodass der
+  Übergang nie ins Schwarze läuft. Decoder werden nach jedem Video sofort freigegeben. Alle Animationen laufen über `transform`/`opacity`/`clip-path`/`filter`
   auf der GPU; der Main-Thread bleibt frei → kein Ruckeln, kein Micro-Stutter. `backgroundThrottling` ist
   deaktiviert, damit der Output auch unfokussiert flüssig bleibt.
 
@@ -99,7 +114,7 @@ npm start -- --folder="C:\Pfad\zu\Bildern"
 | Aktion           | Maus                  | Tastatur    |
 |------------------|-----------------------|-------------|
 | Play / Pause     | großer Mittel-Button  | `Leertaste` |
-| Nächstes Bild    | ▶ rechts              | `→`         |
+| Nächstes Medium  | ▶ rechts              | `→`         |
 | Vorheriges       | ◀ links               | `←`         |
 | Output-Vollbild  | „Output Vollbild"     | `F`         |
 | Vollbild beenden | —                     | `Esc`       |
@@ -116,7 +131,7 @@ npm run dist
 Erzeugt einen assistierten **NSIS-Installer** unter `dist/`:
 
 ```
-dist/OpenSlideShow Setup 1.0.0.exe
+dist/OpenSlideShow Setup 1.4.0.exe
 ```
 
 Der Installer lässt den Zielordner wählen, legt Desktop- und Startmenü-Verknüpfungen an und
@@ -141,13 +156,13 @@ src/
                      zentraler State, IPC. Wählt Transition + Ken-Burns-Parameter
                      zentral, damit Output & Vorschau identisch rendern.
     preload.js       Sichere contextBridge-API (keine Node-APIs im Renderer).
-    mediaScanner.js  Ordner-Scan (rekursiv) → file://-URLs.
+    mediaScanner.js  Ordner-Scan (rekursiv, Bilder + Videos) → file://-URLs.
     playlist.js      Wiedergabe-Reihenfolge (zufällig oder nach Name/Datum sortiert).
-    imageDate.js     Bilddatum fürs Sortieren (EXIF-Aufnahmezeit, sonst Änderungsdatum).
+    mediaDate.js     Datum fürs Sortieren (EXIF bzw. MP4/MOV-Aufnahmezeit, sonst Änderungsdatum).
   renderer/
     shared/
-      engine.js      SlideEngine: Double-Buffering, Prefetch+Decode, Ken Burns,
-      engine.css     Transitions, Text-Overlay. Von Output UND Control-Vorschau genutzt.
+      engine.js      SlideEngine: Double-Buffering, Prefetch+Decode, Ken Burns, Video-
+      engine.css     Wiedergabe, Transitions, Text-Overlay. Von Output UND Vorschau genutzt.
     output/          Beamer-Ausgabe (rahmenlos, cursorlos).
     control/         Operator-Dashboard.
 build/
@@ -155,9 +170,11 @@ build/
   generate-icon.ps1  Reproduzierbarer Icon-Generator (GDI+, keine externen Tools).
 ```
 
-**Datenfluss:** Der Hauptprozess ist die einzige Quelle der Wahrheit. Er sendet pro Bildwechsel ein
-`show`-Payload (Bild, Vorlade-Hinweise, Transition, Ken-Burns-Spec, Overlay, Dauer) an **beide**
-Fenster — so bleibt die Vorschau exakt synchron zum Output.
+**Datenfluss:** Der Hauptprozess ist die einzige Quelle der Wahrheit. Er sendet pro Wechsel ein
+`show`-Payload (Bild/Video, Vorlade-Hinweise, Transition, Ken-Burns-Spec, Overlay, Dauer) an **beide**
+Fenster — so bleibt die Vorschau exakt synchron zum Output. Bei Videos meldet der Output den
+Wiedergabefortschritt und das Ende zurück; der Hauptprozess schaltet erst dann weiter, und die
+Vorschau gleicht ihre Position daran ab.
 
 ## 🛠️ Tech-Stack
 

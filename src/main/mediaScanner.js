@@ -8,18 +8,32 @@ const IMAGE_EXTENSIONS = new Set([
   '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif', '.jfif'
 ]);
 
-// Guard against a single pathological file (e.g. a multi-GB BMP) that would
-// choke the renderer's decoder and stall the whole show.
-const MAX_FILE_BYTES = 256 * 1024 * 1024; // 256 MB
+// Containers Chromium's media stack plays natively (hardware-decoded where the
+// GPU supports the codec): MP4/MOV/M4V (H.264, H.265, AV1), WebM/MKV (VP8, VP9,
+// AV1) and Ogg. Files with an unsupported codec are skipped at playback time.
+const VIDEO_EXTENSIONS = new Set([
+  '.mp4', '.m4v', '.mov', '.webm', '.mkv', '.ogv'
+]);
+
+// Guard against a single pathological image (e.g. a multi-GB BMP) that would
+// choke the renderer's decoder and stall the whole show. Videos are streamed
+// from disk instead of decoded in one go, so they have no size limit.
+const MAX_IMAGE_BYTES = 256 * 1024 * 1024; // 256 MB
+
+function mediaType(ext) {
+  if (IMAGE_EXTENSIONS.has(ext)) return 'image';
+  if (VIDEO_EXTENSIONS.has(ext)) return 'video';
+  return null;
+}
 
 /**
- * Scans a folder (optionally recursive) for image files.
+ * Scans a folder (optionally recursive) for image and video files.
  * Returns a list of media descriptors. Pure I/O, no app state.
  *
  * @param {string} folderPath absolute path to a directory
  * @param {object} [opts]
  * @param {boolean} [opts.recursive=true]
- * @returns {Promise<Array<{path:string, url:string, name:string, size:number, mtime:number}>>}
+ * @returns {Promise<Array<{path:string, url:string, name:string, type:'image'|'video', size:number, mtime:number}>>}
  */
 async function scanFolder(folderPath, opts = {}) {
   const recursive = opts.recursive !== false;
@@ -44,8 +58,8 @@ async function scanFolder(folderPath, opts = {}) {
         if (recursive && !entry.name.startsWith('.')) subdirs.push(full);
         continue;
       }
-      const ext = path.extname(entry.name).toLowerCase();
-      if (!IMAGE_EXTENSIONS.has(ext)) continue;
+      const type = mediaType(path.extname(entry.name).toLowerCase());
+      if (!type) continue;
 
       let size = 0;
       let mtime = 0;
@@ -56,12 +70,13 @@ async function scanFolder(folderPath, opts = {}) {
       } catch {
         continue; // file vanished between readdir and stat
       }
-      if (size > MAX_FILE_BYTES) continue; // skip files too large to decode safely
+      if (type === 'image' && size > MAX_IMAGE_BYTES) continue; // too large to decode safely
 
       results.push({
         path: full,
         url: pathToFileURL(full).href,
         name: entry.name,
+        type,
         size,
         mtime
       });
@@ -82,4 +97,4 @@ async function scanFolder(folderPath, opts = {}) {
   return results;
 }
 
-module.exports = { scanFolder, IMAGE_EXTENSIONS };
+module.exports = { scanFolder, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS };

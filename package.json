@@ -1,7 +1,7 @@
 {
   "name": "openslideshow",
-  "version": "1.3.0",
-  "description": "Dynamische, live-steuerbare Präsentations-Software für Events (Dual-Monitor, Ken Burns, randomisierte Transitions).",
+  "version": "1.4.0",
+  "description": "Dynamische, live-steuerbare Präsentations-Software für Events (Dual-Monitor, Bilder & Videos, Ken Burns, randomisierte Transitions).",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",

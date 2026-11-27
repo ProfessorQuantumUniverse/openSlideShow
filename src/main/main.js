@@ -5,10 +5,15 @@ const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 const { scanFolder } = require('./mediaScanner');
-const { readImageDate } = require('./imageDate');
+const { readMediaDate } = require('./mediaDate');
 const { Playlist, SORT_ORDERS, needsDates, buildSequence } = require('./playlist');
 
 const isDev = process.argv.includes('--dev');
+
+// Chromium suspends media playback in windows it considers hidden (minimized,
+// fully occluded). The beamer output must never stop a video just because the
+// control panel covers it on a single-monitor setup.
+app.commandLine.appendSwitch('disable-background-media-suspend');
 
 // App icon used for windows in dev (packaged builds embed it in the .exe).
 const APP_ICON = path.join(__dirname, '..', '..', 'build', 'icon.ico');
@@ -26,11 +31,14 @@ const TRANSITIONS = [
 
 const state = {
   folder: null,
-  media: [],            // [{path,url,name,size,mtime,date?}]
+  media: [],            // [{path,url,name,type,size,mtime,date?}]
   playlist: new Playlist(),
   isPlaying: false,
-  shownCounter: 0,      // how many images have been shown since folder load
-  current: null,        // {url,name}
+  shownCounter: 0,      // how many items have been shown since folder load
+  current: null,        // {url,name,type}
+  // Playback of the current video, as reported by the window that plays it.
+  // `token` ties every report to one show (the shownCounter at that time).
+  video: { token: 0, time: 0, duration: 0, ended: false, error: false },
   config: {
     displayDuration: 7000,
     transitionDuration: 1500,
@@ -38,6 +46,8 @@ const state = {
     backgroundMode: 'blur',     // 'blur' | 'solid' | 'stretch'
     transitionMode: 'random',   // 'random' | one of TRANSITIONS
     sortOrder: 'random',        // one of SORT_ORDERS (see playlist.js)
+    videoAudio: true,           // play the sound of videos on the output
+    videoVolume: 1.0,           // 0..1
     overlay: {                  // custom text overlay (e.g. the event name)
       enabled: false,
       text: '',
@@ -132,7 +142,10 @@ function createOutputWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false   // never throttle animations when unfocused
+      backgroundThrottling: false,  // never throttle animations when unfocused
+      // Nobody clicks into the beamer window, so videos must be allowed to
+      // start with sound without a user gesture.
+      autoplayPolicy: 'no-user-gesture-required'
     }
   });
   outputWin.removeMenu();
@@ -184,10 +197,11 @@ function send(win, channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
-function broadcastState() {
-  const snapshot = {
+function snapshotState() {
+  return {
     folder: state.folder,
     count: state.media.length,
+    counts: countByType(state.media),
     isPlaying: state.isPlaying,
     shownCounter: state.shownCounter,
     current: state.current,
@@ -196,6 +210,16 @@ function broadcastState() {
     displays: describeDisplays(),
     outputFullscreen: isOutputFullscreen()
   };
+}
+
+function countByType(media) {
+  let videos = 0;
+  for (const m of media) if (m.type === 'video') videos++;
+  return { images: media.length - videos, videos };
+}
+
+function broadcastState() {
+  const snapshot = snapshotState();
   send(controlWin, 'state:update', snapshot);
   send(outputWin, 'state:update', snapshot);
 }
@@ -317,30 +341,45 @@ function pickTransition() {
   return TRANSITIONS[Math.floor(Math.random() * TRANSITIONS.length)];
 }
 
+function describeItem(m) {
+  return { url: m.url, name: m.name, type: m.type };
+}
+
 function buildShowPayload(mediaIndex, withTransition) {
   const item = state.media[mediaIndex];
   if (!item) return null;
 
-  // Prefetch hints: the next few items in shuffle order.
+  // Prefetch hints: the next few items in play order.
   const upcoming = [];
   const order = state.playlist.order;
   const startPos = state.playlist.pos;
   for (let k = 1; k <= 3; k++) {
     const p = order[(startPos + k) % order.length];
     const m = state.media[p];
-    if (m) upcoming.push({ url: m.url, name: m.name });
+    if (m) upcoming.push(describeItem(m));
   }
 
   return {
-    current: { url: item.url, name: item.name },
+    current: describeItem(item),
     upcoming,
+    token: state.shownCounter,   // echoed back in video playback reports
+    playing: state.isPlaying,    // videos start paused while the show is paused
     transition: withTransition ? pickTransition() : 'none',
     transitionDuration: state.config.transitionDuration,
     displayDuration: state.config.displayDuration,
-    kenBurns: makeKenBurns(),
+    kenBurns: item.type === 'video' ? null : makeKenBurns(),
     backgroundMode: state.config.backgroundMode,
     kenBurnsIntensity: state.config.kenBurnsIntensity,
+    audio: audioConfig(),
     shownCounter: state.shownCounter
+  };
+}
+
+function audioConfig() {
+  const v = Number(state.config.videoVolume);
+  return {
+    enabled: state.config.videoAudio !== false,
+    volume: Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1
   };
 }
 
@@ -351,17 +390,83 @@ function clearTimer() {
   if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
 }
 
+// A video slide lasts exactly as long as the video: the window that plays it
+// reports `ended` and we advance then. While it plays, its progress reports
+// keep re-arming this watchdog; if they stop (file unreadable halfway, decoder
+// hang) the show moves on instead of freezing on a still frame forever.
+const VIDEO_STALL_MS = 12000;
+// After a broken video, wait a moment before skipping so a folder full of
+// unplayable files can't spin the playlist at full speed.
+const VIDEO_ERROR_SKIP_MS = 600;
+
+function currentIsVideo() {
+  return Boolean(state.current && state.current.type === 'video');
+}
+
 function scheduleNext() {
   clearTimer();
   if (!state.isPlaying || state.media.length === 0) return;
+  if (currentIsVideo()) {
+    if (state.video.error) {
+      advanceTimer = setTimeout(() => advance(1, true), VIDEO_ERROR_SKIP_MS);
+    } else if (state.video.ended) {
+      // Ended while the show was paused: resuming moves straight on.
+      advanceTimer = setTimeout(() => advance(1, true), 0);
+    } else {
+      advanceTimer = setTimeout(onVideoStalled, VIDEO_STALL_MS);
+    }
+    return;
+  }
   advanceTimer = setTimeout(() => advance(1, true), state.config.displayDuration);
+}
+
+function onVideoStalled() {
+  console.warn(`[video] no playback progress for ${VIDEO_STALL_MS} ms — skipping ${state.current && state.current.name}`);
+  advance(1, true);
+}
+
+// Output plays the video for the audience, so it is the authority on when the
+// video ends. Without an output window the preview takes over.
+function videoAuthority() {
+  if (outputWin && !outputWin.isDestroyed()) return outputWin.webContents;
+  if (controlWin && !controlWin.isDestroyed()) return controlWin.webContents;
+  return null;
+}
+
+function onVideoReport(sender, ev) {
+  if (!ev || typeof ev !== 'object' || sender !== videoAuthority()) return;
+  if (!currentIsVideo() || ev.token !== state.shownCounter) return; // stale show
+  const v = state.video;
+  const num = (x) => (Number.isFinite(x) && x >= 0 ? x : 0);
+
+  switch (ev.type) {
+    case 'progress':
+      v.time = num(ev.time);
+      v.duration = num(ev.duration);
+      if (state.isPlaying && !v.ended) scheduleNext();   // re-arm the watchdog
+      break;
+    case 'ended':
+      v.ended = true;
+      v.time = v.duration = num(ev.duration) || v.duration;
+      if (state.isPlaying) { advance(1, true); return; }
+      break;
+    case 'error':
+      v.error = true;
+      console.warn(`[video] cannot play ${state.current.name}: ${ev.message || 'unknown error'}`);
+      if (state.isPlaying) scheduleNext();
+      break;
+    default:
+      return;
+  }
+  send(controlWin, 'video:progress', { ...v });
 }
 
 function showCurrent(withTransition) {
   const idx = state.playlist.current;
   if (idx < 0) return;
-  state.current = { url: state.media[idx].url, name: state.media[idx].name };
+  state.current = describeItem(state.media[idx]);
   state.shownCounter += 1;
+  state.video = { token: state.shownCounter, time: 0, duration: 0, ended: false, error: false };
   const payload = buildShowPayload(idx, withTransition);
   send(outputWin, 'show', payload);
   send(controlWin, 'show', payload);
@@ -402,7 +507,7 @@ async function ensureDates(media) {
   const worker = async () => {
     while (next < todo.length) {
       const item = todo[next++];
-      item.date = await readImageDate(item);
+      item.date = await readMediaDate(item);
     }
   };
   const workers = Math.min(DATE_READ_CONCURRENCY, todo.length);
@@ -444,28 +549,18 @@ async function loadFolder(folderPath) {
     send(controlWin, 'show', null);
   }
   broadcastState();
-  return { folder: folderPath, count: media.length };
+  return { folder: folderPath, count: media.length, counts: countByType(media) };
 }
 
 // ---------------------------------------------------------------------------
 // IPC wiring
 // ---------------------------------------------------------------------------
 function registerIpc() {
-  ipcMain.handle('app:getState', () => ({
-    folder: state.folder,
-    count: state.media.length,
-    isPlaying: state.isPlaying,
-    shownCounter: state.shownCounter,
-    current: state.current,
-    config: state.config,
-    transitions: TRANSITIONS,
-    displays: describeDisplays(),
-    outputFullscreen: isOutputFullscreen()
-  }));
+  ipcMain.handle('app:getState', () => snapshotState());
 
   ipcMain.handle('media:chooseFolder', async () => {
     const res = await dialog.showOpenDialog(controlWin, {
-      title: 'Bilderordner wählen',
+      title: 'Medienordner wählen (Bilder & Videos)',
       properties: ['openDirectory']
     });
     if (res.canceled || res.filePaths.length === 0) return null;
@@ -485,15 +580,19 @@ function registerIpc() {
 
   ipcMain.on('config:set', (_e, partial) => {
     const prevOrder = state.config.sortOrder;
+    const prevDuration = state.config.displayDuration;
     Object.assign(state.config, partial || {});
     if (!SORT_ORDERS.includes(state.config.sortOrder)) state.config.sortOrder = prevOrder;
     if (state.config.sortOrder !== prevOrder) {
       applySortOrder().catch(err => console.warn('[order] re-sorting failed:', err));
     }
-    // Live re-time if the display duration changed while playing.
-    if (state.isPlaying) scheduleNext();
+    // Live re-time if the display duration changed while playing. (Any other
+    // change — volume, look, overlay — must not restart the current slide.)
+    if (state.isPlaying && state.config.displayDuration !== prevDuration) scheduleNext();
     broadcastState();
   });
+
+  ipcMain.on('media:video', (e, ev) => onVideoReport(e.sender, ev));
 
   ipcMain.on('output:toggleFullscreen', () => {
     if (!outputWin) return;
