@@ -3,7 +3,13 @@
 const $ = (id) => document.getElementById(id);
 
 // --- preview engine (mirrors the output) ---------------------------------
-const preview = new SlideEngine($('preview'), { preview: true, cacheLimit: 6 });
+// Always muted. Its playback reports only count when there is no output window
+// (the main process decides); otherwise it follows the output's position.
+const preview = new SlideEngine($('preview'), {
+  preview: true,
+  cacheLimit: 6,
+  onVideo: (ev) => window.api.reportVideo(ev)
+});
 
 // --- element refs ---------------------------------------------------------
 const els = {
@@ -29,6 +35,12 @@ const els = {
   kbVal: $('kbVal'),
   bgSeg: $('bgSeg'),
   transSelect: $('transSelect'),
+  vidAudio: $('vidAudio'),
+  vidVolRange: $('vidVolRange'),
+  vidVolVal: $('vidVolVal'),
+  vidBar: $('vidBar'),
+  vidFill: $('vidFill'),
+  vidTime: $('vidTime'),
   ovEnable: $('ovEnable'),
   ovText: $('ovText'),
   ovFont: $('ovFont'),
@@ -47,6 +59,8 @@ const els = {
 };
 
 let count = 0;
+let currentType = null;   // 'image' | 'video' of the item on screen
+let lastState = null;
 
 // --- range slider fill helper --------------------------------------------
 // Only updates the --pct custom property; the gradient itself lives in CSS, so
@@ -99,6 +113,8 @@ const sendConfig = debounce(() => {
     backgroundMode: els.bgSeg.querySelector('.seg.active').dataset.val,
     transitionMode: els.transSelect.value,
     sortOrder: els.orderSelect.value,
+    videoAudio: els.vidAudio.checked,
+    videoVolume: parseFloat(els.vidVolRange.value),
     overlay: readOverlay()
   });
 }, 80);
@@ -117,7 +133,7 @@ els.folderBtn.addEventListener('click', async () => {
   setStatus('Ordner wird eingelesen…');
   try {
     const res = await window.api.chooseFolder();
-    setStatus(res ? `${res.count} Bilder geladen.` : 'Abgebrochen.');
+    setStatus(res ? `${describeCount(res.counts, res.count)} geladen.` : 'Abgebrochen.');
   } catch {
     setStatus('Fehler beim Einlesen des Ordners.');
   }
@@ -127,7 +143,7 @@ els.reloadBtn.addEventListener('click', async () => {
   setStatus('Neu einlesen…');
   try {
     const res = await window.api.reloadFolder();
-    if (res) setStatus(`${res.count} Bilder neu eingelesen.`);
+    if (res) setStatus(`${describeCount(res.counts, res.count)} neu eingelesen.`);
   } catch {
     setStatus('Fehler beim Neu-Einlesen.');
   }
@@ -172,6 +188,15 @@ els.bgSeg.addEventListener('click', (e) => {
 });
 
 els.transSelect.addEventListener('change', pushConfig);
+
+// --- video sound ------------------------------------------------------------
+function renderVolume() {
+  els.vidVolVal.textContent = Math.round(parseFloat(els.vidVolRange.value) * 100) + '%';
+  paintRange(els.vidVolRange);
+  els.vidVolRange.disabled = !els.vidAudio.checked;
+}
+els.vidVolRange.addEventListener('input', () => { renderVolume(); pushConfig(); });
+els.vidAudio.addEventListener('change', () => { renderVolume(); pushConfig(); });
 
 // --- overlay controls -----------------------------------------------------
 els.ovSizeRange.addEventListener('input', () => {
@@ -238,16 +263,74 @@ window.api.onShow((payload) => {
   if (payload && payload.current) {
     els.previewEmpty.classList.add('hidden');
     els.curName.textContent = payload.current.name;
+    currentType = payload.current.type;
   } else {
     els.previewEmpty.classList.remove('hidden');
     els.curName.textContent = '';
+    currentType = null;
   }
+  renderVideoProgress(currentType === 'video' ? { time: 0, duration: 0 } : null, true);
+  if (lastState) renderCounter(lastState);
 });
+
+// Authoritative playback position of the current video (from the output).
+window.api.onVideoProgress((v) => {
+  if (!v || currentType !== 'video' || !lastState || v.token !== lastState.shownCounter) return;
+  preview.syncVideo(v.token, v.time);
+  renderVideoProgress(v);
+});
+
+function formatTime(sec) {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0;
+  const s = Math.floor(sec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
+function renderVideoProgress(v, instant) {
+  const show = Boolean(v);
+  // A new video starts the bar at zero at once instead of gliding back.
+  if (instant) {
+    els.vidFill.style.transition = 'none';
+    els.vidFill.style.setProperty('--p', 0);
+    void els.vidFill.offsetWidth;     // commit the jump before re-enabling the glide
+    els.vidFill.style.transition = '';
+  }
+  els.vidBar.classList.toggle('hidden', !show);
+  els.vidTime.classList.toggle('hidden', !show);
+  if (!show) return;
+  if (v.error) {
+    els.vidTime.textContent = 'Video nicht abspielbar — wird übersprungen';
+    els.vidTime.classList.add('vid-error');
+    els.vidFill.style.setProperty('--p', 0);
+    return;
+  }
+  els.vidTime.classList.remove('vid-error');
+  const dur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+  els.vidTime.textContent = dur ? `${formatTime(v.time)} / ${formatTime(dur)}` : '';
+  els.vidFill.style.setProperty('--p', dur ? Math.min(1, v.time / dur) : 0);
+}
+
+function describeCount(counts, total) {
+  if (!counts) return `${total} Dateien`;
+  const parts = [`${counts.images} ${counts.images === 1 ? 'Bild' : 'Bilder'}`];
+  if (counts.videos) parts.push(`${counts.videos} ${counts.videos === 1 ? 'Video' : 'Videos'}`);
+  return parts.join(' · ');
+}
+
+function renderCounter(s) {
+  const label = currentType === 'video' ? 'Video' : 'Bild';
+  els.curCount.textContent = s.count ? `${label} ${(s.shownCounter % s.count) || s.count} · ${s.count}` : '';
+}
 
 window.api.onState((s) => applyState(s));
 
 function applyState(s) {
   count = s.count;
+  lastState = s;
+  preview.setPlaying(s.isPlaying);
 
   // play state
   if (s.isPlaying) {
@@ -265,10 +348,10 @@ function applyState(s) {
   // folder
   if (s.folder) {
     // Build nodes instead of innerHTML so the folder path is always plain text.
-    const count = document.createElement('strong');
-    count.textContent = String(s.count);
+    const total = document.createElement('strong');
+    total.textContent = describeCount(s.counts, s.count);
     els.folderInfo.replaceChildren(
-      count, ' Bilder', document.createElement('br'), String(s.folder)
+      total, document.createElement('br'), String(s.folder)
     );
     els.previewEmpty.classList.toggle('hidden', s.count > 0);
   } else {
@@ -276,7 +359,7 @@ function applyState(s) {
   }
 
   // counter
-  els.curCount.textContent = s.count ? `Bild ${(s.shownCounter % s.count) || s.count} · ${s.count}` : '';
+  renderCounter(s);
 
   // output fullscreen button reflects current projection state
   els.fsBtn.textContent = s.outputFullscreen ? 'Output Fenster' : 'Output Vollbild';
@@ -330,6 +413,11 @@ function syncConfigControls(cfg) {
   if (cfg.sortOrder) els.orderSelect.value = cfg.sortOrder;
   renderOrderHint();
 
+  // video sound
+  els.vidAudio.checked = cfg.videoAudio !== false;
+  els.vidVolRange.value = cfg.videoVolume != null ? cfg.videoVolume : 1;
+  renderVolume();
+
   // overlay
   const ov = cfg.overlay || {};
   els.ovEnable.checked = !!ov.enabled;
@@ -350,4 +438,4 @@ function syncConfigControls(cfg) {
 // --- boot ----------------------------------------------------------------
 [els.durRange, els.transRange, els.kbRange, els.ovSizeRange].forEach(paintRange);
 window.api.getState().then(applyState);
-setStatus('Bereit. Wähle einen Bilderordner.');
+setStatus('Bereit. Wähle einen Ordner mit Bildern und Videos.');

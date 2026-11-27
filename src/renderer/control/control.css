@@ -130,7 +130,25 @@ body {
   z-index: 16;   /* keep the filename bar above the text-overlay preview */
 }
 .cur-name { color: #fff; font-weight: 500; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cur-meta { display: flex; align-items: center; gap: 10px; }
 .cur-count { color: var(--txt-dim); }
+.vid-time { color: #fff; font-variant-numeric: tabular-nums; font-weight: 600; }
+.vid-time.vid-error { color: var(--warn); }
+
+/* Playback position of a video slide, along the bottom edge of the preview. */
+.vid-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  z-index: 17; pointer-events: none;
+}
+.vid-fill {
+  height: 100%; width: 100%;
+  background: var(--accent-grad);
+  transform-origin: left center;
+  transform: scaleX(var(--p, 0));
+  /* Reports arrive ~5x per second; a short linear glide makes it continuous. */
+  transition: transform 0.2s linear;
+}
 
 .state-chip {
   font-size: 11px; padding: 4px 12px; border-radius: 20px; font-weight: 600;
@@ -199,6 +217,8 @@ input[type="range"] {
   background: linear-gradient(90deg, var(--accent) 0%, var(--accent) var(--pct), #2a3142 var(--pct));
   outline: none;
 }
+input[type="range"]:disabled { opacity: 0.4; }
+input[type="range"]:disabled::-webkit-slider-thumb { cursor: default; }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 18px; height: 18px; border-radius: 50%;
