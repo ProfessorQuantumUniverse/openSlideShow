@@ -1,0 +1,103 @@
+name: Release
+
+# Publishes a GitHub release with the Windows installer for the version in
+# package.json — once per version. Bumping the version on main (or adding its
+# notes in release-notes/<version>.md) is all a release takes; runs for a
+# version that already has a release do nothing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - release-notes/**
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & publish Windows release
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      # No code-signing certificate in CI: build unsigned.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check whether this version is already released
+        id: version
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "$version" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $version already exists — nothing to do."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Releasing $version."
+          fi
+
+      - uses: actions/setup-node@v7
+        if: steps.version.outputs.exists == 'false'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Electron and electron-builder downloads
+        if: steps.version.outputs.exists == 'false'
+        uses: actions/cache@v6
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.version.outputs.exists == 'false'
+        run: npm ci
+
+      - name: Build Windows installer (unsigned)
+        if: steps.version.outputs.exists == 'false'
+        run: npm run dist -- --publish never
+
+      - name: Publish release
+        if: steps.version.outputs.exists == 'false'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          exe="dist/OpenSlideShow Setup $VERSION.exe"
+          test -f "$exe"
+          sha=$(sha256sum "$exe" | cut -d' ' -f1)
+
+          # release-notes/<version>.md: first line "# <title>", the rest is the body.
+          notes="release-notes/$VERSION.md"
+          extra=()
+          if [ -f "$notes" ]; then
+            title=$(head -n 1 "$notes" | sed 's/^#[[:space:]]*//')
+            tail -n +2 "$notes" > body.md
+          else
+            title="$VERSION"
+            : > body.md
+            extra=(--generate-notes)
+          fi
+          printf '\n**Download:** `OpenSlideShow Setup %s.exe` below (Windows x64 installer).\nSHA-256: `%s`\n' \
+            "$VERSION" "$sha" >> body.md
+
+          gh release create "$VERSION" "$exe" \
+            --target "$GITHUB_SHA" \
+            --title "$title" \
+            --notes-file body.md \
+            "${extra[@]}"
